@@ -57,18 +57,11 @@
                     var x = (new Date()).getTime();
 
                     // Assume all series are the same length.
-                    if (series[0].data.length < 20)
-                    {
-                      series[0].addPoint([x, json.users], true, false);
-                      series[1].addPoint([x, json.congas], true, false);
-                      series[2].addPoint([x, json.messages], true, false);
-                    }
-                    else
-                    {
-                      series[0].addPoint([x, json.users], true, true);
-                      series[1].addPoint([x, json.congas], true, true);
-                      series[2].addPoint([x, json.messages], true, true);
-                    }
+                    var remove_old = (series[0].data.length >= 20);
+                    series[0].addPoint([x, json.users], true, remove_old);
+                    series[1].addPoint([x, json.congas], true, remove_old);
+                    series[2].addPoint([x, json.messages], true, remove_old);
+                    series[3].addPoint([x, json.longest], true, remove_old);
                   });
               }, 1000);
             }
@@ -99,7 +92,7 @@
           }
         },
         legend: {
-          enabled: false
+          enabled: true
         },
         exporting: {
           enabled: false
@@ -115,6 +108,10 @@
         },
         {
           name: 'Messages',
+          data: []
+        },
+        {
+          name: 'Longest Conga',
           data: []
         }]
       });

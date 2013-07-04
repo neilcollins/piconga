@@ -13,5 +13,6 @@ urlpatterns = patterns('',
 
     # JSON URLs - done in a reasonably RESTful way
     url(r'^user/(.*)', rest.user, name='user'),
+    url(r'^conga/(.*)', rest.conga, name='conga'),
     url(r'^status', rest.status, name='status'),
 )
