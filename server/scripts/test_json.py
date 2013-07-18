@@ -9,7 +9,7 @@ def add_user(session, username, password):
                'password': password,
                'mac': mac}
     headers = {'content-type': 'application/json'}
-    r = session.post('http://localhost:8000/conga/user/',
+    r = session.post('http://10.248.113.100:8000/conga/user/',
                      data=json.dumps(payload),
                      headers=headers)
     return r
@@ -17,7 +17,7 @@ def add_user(session, username, password):
 def del_user(session, username, password):
     payload = {'username': username, 'password': password}
     headers = {'content-type': 'application/json'}
-    r = session.delete('http://localhost:8000/conga/user/',
+    r = session.delete('http://10.248.113.100:8000/conga/user/',
                        data=json.dumps(payload),
                        headers=headers)
     return r
@@ -25,7 +25,7 @@ def del_user(session, username, password):
 def add_conga(session, name, password):
     payload = {'name': name, 'password': password}
     headers = {'content-type': 'application/json'}
-    r = session.post('http://localhost:8000/conga/conga/',
+    r = session.post('http://10.248.113.100:8000/conga/conga/',
                      data=json.dumps(payload),
                      headers=headers)
     return r
@@ -33,14 +33,14 @@ def add_conga(session, name, password):
 def join_conga(session, name, password):
     payload = {'name': name, 'password': password}
     headers = {'content-type': 'application/json'}
-    r = session.put('http://localhost:8000/conga/conga/',
+    r = session.put('http://10.248.113.100:8000/conga/conga/',
                     data=json.dumps(payload),
                     headers=headers)
     return r
 
 def del_conga(session, name, password):
     headers = {'content-type': 'application/json'}
-    r = session.delete('http://localhost:8000/conga/conga/'+name,
+    r = session.delete('http://10.248.113.100:8000/conga/conga/'+name,
                        headers=headers)
     return r
 
@@ -52,63 +52,63 @@ s4 = requests.Session()
 
 # Check a rubbish request
 print "\nRubbish request"
-r = s1.get('http://localhost:8000/conga/user/')
-print r.status_code, r.text
+r = s1.get('http://10.248.113.100:8000/conga/user/')
+print r.status_code, r.text, r.elapsed
 
 # Create the user on first registration
 print "\nRegister"
 r = add_user(s1, "peter", "secret")
-print r.status_code, r.text
+print r.status_code, r.text, r.elapsed
 r = add_user(s2, "paul", "another_secret")
-print r.status_code, r.text
+print r.status_code, r.text, r.elapsed
 r = add_user(s3, "jane", "more_secrets")
-print r.status_code, r.text
+print r.status_code, r.text, r.elapsed
 r = add_user(s4, "john", "whatever")
-print r.status_code, r.text
+print r.status_code, r.text, r.elapsed
 
 # Allow re-regsitration
 print "\nRe-register"
 r = add_user(s1, "peter", "secret")
-print r.status_code, r.text
+print r.status_code, r.text, r.elapsed
 
 # Get the user details
 print "\nRead user"
-r = s1.get('http://localhost:8000/conga/user/peter')
-print r.status_code, r.text
+r = s1.get('http://10.248.113.100:8000/conga/user/peter')
+print r.status_code, r.text, r.elapsed
 
 # Get another user details - should fail?
-r = s2.get('http://localhost:8000/conga/user/peter')
-print r.status_code, r.text
+r = s2.get('http://10.248.113.100:8000/conga/user/peter')
+print r.status_code, r.text, r.elapsed
 
 # Check overwrite does not work.
 print "\nClaim user - should not be allowed"
 r = add_user(s1, "peter", "secret2")
-print r.status_code, r.text
+print r.status_code, r.text, r.elapsed
 
 # Create a conga
 print "\nCreate conga"
 r = add_conga(s1, "conga1", "conga1pw")
-print r.status_code, r.text
+print r.status_code, r.text, r.elapsed
 r = add_conga(s3, "conga2", "conga2pw")
-print r.status_code, r.text
+print r.status_code, r.text, r.elapsed
 
 # Join the conga
 print "\nJoin conga"
 r = join_conga(s2, "conga1", "conga1pw")
-print r.status_code, r.text
+print r.status_code, r.text, r.elapsed
 r = join_conga(s4, "conga2", "bad_password")
-print r.status_code, r.text
+print r.status_code, r.text, r.elapsed
 r = join_conga(s4, "conga1", "conga1pw")
-print r.status_code, r.text
+print r.status_code, r.text, r.elapsed
 
 # Get the conga details
 print "\nRead conga"
-r = s1.get('http://localhost:8000/conga/conga/New%20conga')
-print r.status_code, r.text
-r = s1.get('http://localhost:8000/conga/conga/conga2')
-print r.status_code, r.text
-r = s1.get('http://localhost:8000/conga/conga/conga1')
-print r.status_code, r.text
+r = s1.get('http://10.248.113.100:8000/conga/conga/New%20conga')
+print r.status_code, r.text, r.elapsed
+r = s1.get('http://10.248.113.100:8000/conga/conga/conga2')
+print r.status_code, r.text, r.elapsed
+r = s1.get('http://10.248.113.100:8000/conga/conga/conga1')
+print r.status_code, r.text, r.elapsed
 
 print "\nPause...."
 sleep(1)
@@ -116,23 +116,23 @@ sleep(1)
 # Delete the conga
 print "\nDelete conga"
 r = del_conga(s1, "conga1", "conga1pw")
-print r.status_code, r.text
+print r.status_code, r.text, r.elapsed
 
 print "\nPause...."
 sleep(1)
 
 r = del_conga(s3, "conga2", "conga2pw")
-print r.status_code, r.text
+print r.status_code, r.text, r.elapsed
 
 # Delete the user
 print "\nDeregister"
 r = del_user(s1, "peter", "bad_password")
-print r.status_code, r.text
+print r.status_code, r.text, r.elapsed
 r = del_user(s1, "peter", "secret")
-print r.status_code, r.text
+print r.status_code, r.text, r.elapsed
 r = del_user(s2, "paul", "another_secret")
-print r.status_code, r.text
+print r.status_code, r.text, r.elapsed
 r = del_user(s3, "jane", "more_secrets")
-print r.status_code, r.text
+print r.status_code, r.text, r.elapsed
 r = del_user(s4, "john", "whatever")
-print r.status_code, r.text
+print r.status_code, r.text, r.elapsed
