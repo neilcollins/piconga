@@ -128,6 +128,14 @@ INSTALLED_APPS = (
     'conga'
 )
 
+# Limit the hashers we use to ones that won't take AGES on a Raspberry Pi.
+# We're not really that concerned about security, so this should be fine.
+PASSWORD_HASHERS = (
+    'django.contrib.auth.hashers.SHA1PasswordHasher',
+    'django.contrib.auth.hashers.MD5PasswordHasher',
+    'django.contrib.auth.hashers.CryptPasswordHasher',
+)
+
 # A sample logging configuration. The only tangible logging
 # performed by this configuration is to send an email to
 # the site admins on every HTTP 500 error when DEBUG=False.
