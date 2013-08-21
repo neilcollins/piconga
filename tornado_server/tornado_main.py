@@ -21,6 +21,14 @@ To this end, we are using Tornado to build a very simple TCP proxy.
 """
 from tornado.tcpserver import TCPServer
 from tornado.ioloop import IOLoop
+import signal
+
+
+def handle_signal(sig, frame):
+    """
+    Close everything down nicely.
+    """
+    IOLoop.instance().add_callback(IOLoop.instance().stop)
 
 
 class TCPProxy(TCPServer):
@@ -84,6 +92,9 @@ class Repeater(object):
 
 
 if __name__ == '__main__':
+    signal.signal(signal.SIGINT, handle_signal)
+    signal.signal(signal.SIGTERM, handle_signal)
     proxy = TCPProxy()
     proxy.listen(8888)
     IOLoop.instance().start()
+    IOLoop.instance().close()
