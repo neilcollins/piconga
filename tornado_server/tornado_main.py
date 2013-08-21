@@ -57,8 +57,7 @@ class Repeater(object):
         Spends from now until the rest of eternity reading from the source
         stream and writing to the destination stream.
         """
-        while True:
-            self.source_stream.read_until(b'\r\n\r\n', self._parse_headers)
+        self.source_stream.read_until(b'\r\n\r\n', self._parse_headers)
 
     def _parse_headers(self, data):
         """
@@ -74,12 +73,13 @@ class Repeater(object):
                 headers[key] = val
 
         length = int(headers.get('Content-Length', '0'))
+        self.source_stream.read_bytes(length, self._repeat_body)
 
     def _repeat_body(self, data):
         """
         Sends the body down the wire.
         """
-        destination.write(data)
+        self.destination_stream.write(data)
 
 
 if __name__ == '__main__':
