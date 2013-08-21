@@ -74,6 +74,7 @@ class Repeater(object):
 
         length = int(headers.get('Content-Length', '0'))
         self.source_stream.read_bytes(length, self._repeat_body)
+        self.repeat_forever()
 
     def _repeat_body(self, data):
         """
