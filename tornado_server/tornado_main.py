@@ -67,28 +67,37 @@ class Repeater(object):
         """
         self.source_stream.read_until(b'\r\n\r\n', self._parse_headers)
 
-    def _parse_headers(self, data):
+    def _parse_headers(self, header_data):
         """
         Turns the headers into a dictionary. Checks the content-length and
         reads that many bytes as the body.
         """
         headers = {}
-        data = data.decode('utf-8')
+        decoded_data = header_data.decode('utf-8')
 
-        for line in data.split('\r\n'):
+        for line in decoded_data.split('\r\n'):
             if line:
                 key, val = line.split(':', 1)
                 headers[key] = val
 
+        # Get the content-length, and then read however many bytes we need to
+        # get the body.
         length = int(headers.get('Content-Length', '0'))
-        self.source_stream.read_bytes(length, self._repeat_body)
+
+        self.source_stream.read_bytes(length, self._repeat_data(header_data))
         self.wait_for_headers()
 
-    def _repeat_body(self, data):
+    def _repeat_data(self, header_data):
         """
-        Sends the body down the wire.
+        Builds a closure for use as a data sending callback. We use a closure
+        here to ensure that we are able to wait for the message body before
+        sending the headers, just in case the message is ill-formed. That way
+        we don't confuse clients by sending headers with no following body.
         """
-        self.destination_stream.write(data)
+        def callback(data):
+            self.destination_stream.write(header_data + data)
+
+        return callback
 
 
 if __name__ == '__main__':
