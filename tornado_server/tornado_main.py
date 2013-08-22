@@ -45,7 +45,7 @@ class TCPProxy(TCPServer):
         """
         if self.last_connection is not None:
             r = Repeater(self.last_connection, stream)
-            r.repeat_forever()
+            r.wait_for_headers()
 
         self.last_connection = stream
 
@@ -60,10 +60,10 @@ class Repeater(object):
         self.source_stream = source
         self.destination_stream = destination
 
-    def repeat_forever(self):
+    def wait_for_headers(self):
         """
-        Spends from now until the rest of eternity reading from the source
-        stream and writing to the destination stream.
+        Read from the incoming stream until we receive the delimiter that tells
+        us that the headers have ended.
         """
         self.source_stream.read_until(b'\r\n\r\n', self._parse_headers)
 
@@ -82,7 +82,7 @@ class Repeater(object):
 
         length = int(headers.get('Content-Length', '0'))
         self.source_stream.read_bytes(length, self._repeat_body)
-        self.repeat_forever()
+        self.wait_for_headers()
 
     def _repeat_body(self, data):
         """
