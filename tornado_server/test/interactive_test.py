@@ -21,7 +21,8 @@ while True:
     message = raw_input("Type your message: ")
     length = len(message)
     send_msg = 'Content-Length: %s\r\n\r\n%s' % (length, message)
+    full_len = len(send_msg)
     sck1.send(send_msg)
 
-    resp = sck2.recv(length)
+    resp = sck2.recv(full_len)
     print "Response received:\n%s\n" % resp
