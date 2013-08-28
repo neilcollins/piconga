@@ -28,3 +28,41 @@ class Database(object):
         :param db_path: The path to the database.
         """
         self.conn = sqlite3.connect(db_path)
+
+    def get(self, query, parameters=()):
+        """
+        Execute a query that will return data against the Sqlite3 database.
+        Returns the operation result as provided by the cursor.
+
+        :param query: The query in the form of a Python format string.
+        :param parameters: The parameters to add to the query. DO NOT ADD THEM
+                           YOURSELF YOU WILL GET IT WRONG.
+        """
+        # Munge the string, removing the %s characters and adding the ?
+        # instead. There is a bug here if we ever need literal % chars: let's
+        # just never need them, eh?
+        query.replace("%%s", "?")
+
+        cursor = self.conn.cursor()
+        cursor.execute(query, parameters)
+
+        return cursor.fetchall()
+
+    def execute(self, query, parameters):
+        """
+        Executes a query that will not return data against the Sqlite3
+        database. Returns nothing.
+
+        :param query: The query in the form of a Python format string.
+        :param parameters: The parameters to add to the query. DO NOT ADD THEM
+                           YOURSELF YOU WILL GET IT WRONG.
+        """
+        # Munge the string, removing the %s characters and adding the ?
+        # instead. There is a bug here if we ever need literal % chars: let's
+        # just never need them, eh?
+        query.replace("%%s", "?")
+
+        cursor = self.conn.cursor()
+        cursor.execute(query, parameters)
+
+        return
