@@ -9,3 +9,7 @@ the main application.
 
 At the current moment we only provide Sqlite access. Postgres will come later.
 """
+from .sqlite import Database
+
+__all__ = [Database]
+
