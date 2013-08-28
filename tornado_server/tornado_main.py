@@ -22,6 +22,7 @@ To this end, we are using Tornado to build a very simple TCP proxy.
 from tornado.tcpserver import TCPServer
 from tornado.ioloop import IOLoop
 import signal
+from db import Database
 
 
 def handle_signal(sig, frame):
@@ -38,6 +39,13 @@ class TCPProxy(TCPServer):
     between that connection and the last connection that came in.
     """
     last_connection = None
+    db = None
+
+    def __init__(self, db_path, *args, **kwargs):
+        super(TCPProxy, self).__init__(*args, **kwargs)
+
+        self.db = Database()
+        self.db.connect(db_path)
 
     def handle_stream(self, stream, address):
         """
@@ -103,7 +111,7 @@ class Repeater(object):
 if __name__ == '__main__':
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
-    proxy = TCPProxy()
+    proxy = TCPProxy('server/piconga.db')
     proxy.listen(8888)
     IOLoop.instance().start()
     IOLoop.instance().close()
