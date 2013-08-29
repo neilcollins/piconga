@@ -10,7 +10,8 @@ import time
 
 target = '127.0.0.1'
 target_port = 8888
-msg = "Content-Length: 13\r\n\r\nTest message."
+hello = "HELLO\r\nContent-Length: 0\r\n\r\n"
+msg = "MSG\r\nContent-Length: 13\r\n\r\nTest message."
 full_len = len(msg)
 
 sck1 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -24,6 +25,12 @@ for i in xrange(0, 10):
 
 sck_last = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sck_last.connect((target, target_port))
+
+# Each socket needs to say hello.
+sck1.send(hello)
+for sck in sockets:
+    sck.send(hello)
+sck_last.send(hello)
 
 # Send the initial message.
 sck1.send(msg)
