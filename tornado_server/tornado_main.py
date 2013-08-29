@@ -49,13 +49,19 @@ class TCPProxy(TCPServer):
 
     def handle_stream(self, stream, address):
         """
-        When a new incoming connection is found, this function is called.
+        When a new incoming connection is found, this function is called. Wrap
+        the incoming connection in a Participant, then make it the most recent
+        connection. Tell the oldest connection to use the new one as its
+        write target.
         """
-        if self.last_connection is not None:
-            r = Participant(self.last_connection, stream)
-            r.wait_for_headers()
+        r = Participant(stream)
 
-        self.last_connection = stream
+        if self.last_connection is not None:
+            self.last_connection.add_destination(r)
+
+        self.last_connection = r
+
+        r.wait_for_headers()
 
 
 class Participant(object):
@@ -63,15 +69,26 @@ class Participant(object):
     Participant wraps a single incoming IOStream. It knows about the next
     participant in the Conga chain, and correctly writes to it.
     """
-    def __init__(self, source, destination):
+    def __init__(self, source):
         self.source_stream = source
+        self.destination = None
+
+    def add_destination(self, destination):
+        """
+        Add a new conga participant as the target for any incoming conga
+        messages.
+        """
         self.destination = destination
 
     def write(self, data):
         """
-        Write data on the downstream connection.
+        Write data on the downstream connection. If no such connection exists,
+        drop this stuff on the floor.
         """
-        self.source_stream.write(data)
+        try:
+            self.source_stream.write(data)
+        except AttributeError:
+            pass
 
     def wait_for_headers(self):
         """
