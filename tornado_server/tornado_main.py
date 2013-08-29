@@ -35,8 +35,8 @@ def handle_signal(sig, frame):
 class TCPProxy(TCPServer):
     """
     TCPProxy defines the central TCP serving implementation for the Pi Conga
-    server. Each time a new connection comes in, this establishes a repeater
-    between that connection and the last connection that came in.
+    server. Each time a new connection comes in, this establishes a Participant
+    object that wraps that connection.
     """
     last_connection = None
     db = None
@@ -52,21 +52,26 @@ class TCPProxy(TCPServer):
         When a new incoming connection is found, this function is called.
         """
         if self.last_connection is not None:
-            r = Repeater(self.last_connection, stream)
+            r = Participant(self.last_connection, stream)
             r.wait_for_headers()
 
         self.last_connection = stream
 
 
-class Repeater(object):
+class Participant(object):
     """
-    Repeater defines a mapping between two different IOStreams. It provides
-    functionality to pull messages off of one connection and write them down
-    on another.
+    Participant wraps a single incoming IOStream. It knows about the next
+    participant in the Conga chain, and correctly writes to it.
     """
     def __init__(self, source, destination):
         self.source_stream = source
-        self.destination_stream = destination
+        self.destination = destination
+
+    def write(self, data):
+        """
+        Write data on the downstream connection.
+        """
+        self.source_stream.write(data)
 
     def wait_for_headers(self):
         """
@@ -103,7 +108,7 @@ class Repeater(object):
         we don't confuse clients by sending headers with no following body.
         """
         def callback(data):
-            self.destination_stream.write(header_data + data)
+            self.destination.write(header_data + data)
 
         return callback
 
