@@ -21,6 +21,7 @@ class Participant(object):
         self.destination = None
         self.db = db
         self.state = OPENING
+        self.participant_id = None
 
     def add_destination(self, destination):
         """
