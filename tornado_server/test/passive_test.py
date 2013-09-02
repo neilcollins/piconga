@@ -10,7 +10,7 @@ import time
 
 target = '127.0.0.1'
 target_port = 8888
-hello = "HELLO\r\nContent-Length: 0\r\n\r\n"
+hello = "HELLO\r\nContent-Length: 0\r\nUser-ID: 1\r\n\r\n"
 msg = "MSG\r\nContent-Length: 13\r\n\r\nTest message."
 full_len = len(msg)
 

@@ -105,7 +105,22 @@ class Participant(object):
         here, so there's no point parsing them twice.
         """
         def callback(data):
-            self.state = UP
+            try:
+                received_id = headers['User-ID']
+                conga_id = self.db.get(
+                    "SELECT conga_id FROM conga_congamember WHERE id=%s",
+                    (received_id,)
+                )[0][0]
+
+                # At this stage we've successfully validated this participant.
+                # Add them to the conga and bring them up.
+                self.participant_id = received_id
+                self.state = UP
+            except KeyError:
+                # This KeyError will catch a missing User-ID as well as a
+                # failed SQL lookup.
+                self.source_stream.close()
+                self.state = CLOSING
 
         return callback
 
