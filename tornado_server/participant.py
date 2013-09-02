@@ -116,9 +116,9 @@ class Participant(object):
                 # Add them to the conga and bring them up.
                 self.participant_id = received_id
                 self.state = UP
-            except KeyError:
-                # This KeyError will catch a missing User-ID as well as a
-                # failed SQL lookup.
+            except (KeyError, IndexError):
+                # This will catch a missing User-ID as well as a failed SQL
+                # lookup.
                 self.source_stream.close()
                 self.state = CLOSING
 
