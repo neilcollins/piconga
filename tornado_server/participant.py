@@ -83,7 +83,7 @@ class Participant(object):
         length = int(headers.get('Content-Length', '0'))
 
         if (request_uri == 'HELLO') and (self.state == OPENING):
-            cb = self._hello(header_data)
+            cb = self._hello(headers)
         elif (request_uri == 'BYE') and (self.state == UP):
             pass
         elif (request_uri == 'MSG') and (self.state == UP):
@@ -95,10 +95,14 @@ class Participant(object):
         self.source_stream.read_bytes(length, cb)
         self.wait_for_headers()
 
-    def _hello(self, header_data):
+    def _hello(self, headers):
         """
         Builds a closure for use as a registration callback. This closure is
         actually really minor, but we do it anyway to keep the interface.
+
+        Note that this closure does not take the header data but the actual
+        headers dictionary. This is deliberate: we'll actually use the headers
+        here, so there's no point parsing them twice.
         """
         def callback(data):
             self.state = UP
