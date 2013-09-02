@@ -17,10 +17,19 @@ class Participant(object):
     participant in the Conga chain, and correctly writes to it.
     """
     def __init__(self, source, db):
+        #: The tornado IOStream socket wrapper pointing to the end user.
         self.source_stream = source
+
+        #: The Participant object representing the next link in the conga.
         self.destination = None
+
+        #: A reference to the database object.
         self.db = db
+
+        #: An indiciation of the state of this connection.
         self.state = OPENING
+
+        #: The ID of this particular conga participant.
         self.participant_id = None
 
     def add_destination(self, destination):
