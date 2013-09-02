@@ -93,7 +93,10 @@ class Participant(object):
             raise RuntimeError("Unexpected verb.")
 
         self.source_stream.read_bytes(length, cb)
-        self.wait_for_headers()
+
+        # If we're closing up shop, don't bother reading again.
+        if self.state != CLOSING:
+            self.wait_for_headers()
 
     def _hello(self, headers):
         """
