@@ -11,14 +11,14 @@ import time
 
 target = '127.0.0.1'
 target_port = 8888
-hello = 'HELLO\r\nContent-Length: 0\r\n\r\n'
+hello = 'HELLO\r\nContent-Length: 0\r\nUser-ID: %s\r\n\r\n'
 
 sck1 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sck2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sck1.connect((target, target_port))
 sck2.connect((target, target_port))
-sck1.send(hello)
-sck2.send(hello)
+sck1.send(hello % 1)
+sck2.send(hello % 2)
 
 while True:
     message = raw_input("Type your message: ")

@@ -17,10 +17,20 @@ class Participant(object):
     participant in the Conga chain, and correctly writes to it.
     """
     def __init__(self, source, db):
+        #: The tornado IOStream socket wrapper pointing to the end user.
         self.source_stream = source
+
+        #: The Participant object representing the next link in the conga.
         self.destination = None
+
+        #: A reference to the database object.
         self.db = db
+
+        #: An indiciation of the state of this connection.
         self.state = OPENING
+
+        #: The ID of this particular conga participant.
+        self.participant_id = None
 
     def add_destination(self, destination):
         """
@@ -73,7 +83,7 @@ class Participant(object):
         length = int(headers.get('Content-Length', '0'))
 
         if (request_uri == 'HELLO') and (self.state == OPENING):
-            cb = self._hello(header_data)
+            cb = self._hello(headers)
         elif (request_uri == 'BYE') and (self.state == UP):
             pass
         elif (request_uri == 'MSG') and (self.state == UP):
@@ -83,15 +93,37 @@ class Participant(object):
             raise RuntimeError("Unexpected verb.")
 
         self.source_stream.read_bytes(length, cb)
-        self.wait_for_headers()
 
-    def _hello(self, header_data):
+        # If we're closing up shop, don't bother reading again.
+        if self.state != CLOSING:
+            self.wait_for_headers()
+
+    def _hello(self, headers):
         """
         Builds a closure for use as a registration callback. This closure is
         actually really minor, but we do it anyway to keep the interface.
+
+        Note that this closure does not take the header data but the actual
+        headers dictionary. This is deliberate: we'll actually use the headers
+        here, so there's no point parsing them twice.
         """
         def callback(data):
-            self.state = UP
+            try:
+                received_id = headers['User-ID']
+                conga_id = self.db.get(
+                    "SELECT conga_id FROM conga_congamember WHERE id=%s",
+                    (received_id,)
+                )[0][0]
+
+                # At this stage we've successfully validated this participant.
+                # Add them to the conga and bring them up.
+                self.participant_id = received_id
+                self.state = UP
+            except (KeyError, IndexError):
+                # This will catch a missing User-ID as well as a failed SQL
+                # lookup.
+                self.source_stream.close()
+                self.state = CLOSING
 
         return callback
 
