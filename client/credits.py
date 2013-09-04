@@ -1,6 +1,7 @@
 import curses
 from abc import ABCMeta, abstractmethod
 from random import randint
+import re
 
 class Effect(object):
     """
@@ -23,7 +24,7 @@ class Scroll(Effect):
     def __init__(self, screen, rate):
         """
         Constructor.  The rate defines how many frames to wait between
-        scrolling.
+        scrolling the screen.
         """
         self._screen = screen
         self._rate = rate
@@ -37,6 +38,36 @@ class Scroll(Effect):
             self._screen.scroll()
             self._last_frame = frame_no
         
+class Cycle(Effect):
+    """
+    Special effect to cycle the colours on a some specified text.
+    """
+
+    def __init__(self, screen, text, y):
+        """
+        Constructor.  Remember the text to cycle and the starting line (y).
+        The text may be multi-lined.
+        """
+        self._screen = screen
+        self._text = text
+        self._y = y
+        self._colour = 0
+
+    def update(self, frame_no):
+        """
+        Cycle the text colors.
+        """
+        if frame_no % 2 == 0:
+            return
+
+        y = self._y
+        for line in self._text.split("\n"):
+            if self._screen.is_visible(0, y):
+                self._screen.centre(line, y, self._colour)
+            y += 1
+        self._colour = (self._colour + 1) % 8
+
+
 class Star(object):
     """
     Simple class to represent a single star for the Stars special effect.
@@ -57,16 +88,25 @@ class Star(object):
             self._y = randint(0, height-1)
             if self._screen._pad.inch(self._y, self._x) == 32:
                 break
+        self._old_char = None
 
     def update(self):
         """
         Draw the star.
         """
+        if not self._screen.is_visible(self._x, self._y):
+            return
+
         self._cycle += 1
 	if self._cycle >= len(self._star_chars):
             self._cycle = 0
-    
-        self._screen.putch(self._star_chars[self._cycle], self._x, self._y)
+   
+        new_char = self._star_chars[self._cycle]
+        if new_char == self._old_char:
+            return
+ 
+        self._screen.putch(new_char, self._x, self._y)
+        self._old_char = new_char
 
 class Stars(Effect):
     """
@@ -98,11 +138,16 @@ class Screen(object):
         # Save off the screen details and se up the scrolling pad.
         self._screen = win
         (self.height, self.width) = self._screen.getmaxyx()
-        self._pad = curses.newpad(1000, self.width)
+        self.buffer_height = 200
+        self._pad = curses.newpad(self.buffer_height, self.width)
         self._start_line = 0
 
         # Set up basic colour schemes.
-        curses.init_pair(1, curses.COLOR_RED, curses.COLOR_BLACK)
+        for i in range(curses.COLOR_RED, curses.COLOR_WHITE):
+            curses.init_pair(i, i, curses.COLOR_BLACK)
+
+        # Disable the cursor.
+        curses.curs_set(0)
 
     def scroll(self):
         """
@@ -132,26 +177,57 @@ class Screen(object):
         """
         Centre the text (str) on the specified line (y) using the optional
         attributes (attr).
-        """
-        self._pad.addstr(y, (self.width - len(str))/2, str, attr)
 
-titles = """
+        This function will convert ${n} into colour attribute n for any
+        subseqent text in the line, thus allowing multi-coloured text.
+        """
+        segments = [["", attr]]
+        line = str
+        while True:
+            match = re.match(r"(.*?)\$[{](\d+)[}]", line)
+            if match is None:
+                break
+            segments[-1][0] = match.group(1)
+            segments.append(["", int(match.group(2))])
+            line = line[len(match.group(0)):]
+        segments[-1][0] = line
+        total_width = sum([len(x[0]) for x in segments])
+
+        x = (self.width - total_width)/2
+        for (text, style) in segments:
+            self._pad.addstr(y, x, text, curses.color_pair(style))
+            x += len(text)
+
+    def is_visible(self, x, y):
+        """
+        Return whether the specified location is on the visible screen.
+        """
+        return ((y >= self._start_line) and 
+                (y < self._start_line + self.height))
+raspberry = """
+${2}   .~~.   .~~.                                                         
+${2}  '. \ ' ' / .'                                                        
+${1}   .~ .~~~..~.                                                         
+${1}  : .~.'~'.~. :   ${0}                     _                             _ 
+${1} ~ (   ) (   ) ~  ${0}    _ _ __ _ ____ __| |__  ___ _ _ _ _ _  _   _ __(_)
+${1}( : '~'.~.'~' : ) ${0}   | '_/ _` (_-< '_ \ '_ \/ -_) '_| '_| || | | '_ \ |
+${1} ~ .~ (   ) ~. ~  ${0}   |_| \__,_/__/ .__/_.__/\___|_| |_|  \_, | | .__/_|
+${1}  (  : '~' :  )   ${0}               |_|                     |__/  |_|     
+${1}   '~ .~~~. ~'                                                         
+${1}       '~'                                                             
+"""
+
+piconga = """
  ____  _    ____                        
 |  _ \(_)  / ___|___  _ __   __ _  __ _ 
 | |_) | | | |   / _ \| '_ \ / _` |/ _` |
 |  __/| | | |__| (_) | | | | (_| | (_| |
 |_|   |_|  \____\___/|_| |_|\__, |\__,_|
                             |___/       
+"""
 
-
-
-
-
-
-
-
-
-An open source project by:
+titles = """
+Written by:
 
 
 Cory Benfield
@@ -185,17 +261,32 @@ def credits(win):
     # Create the basic credits to scroll.
     screen = Screen(win)
     y = screen.height
-    for line in titles.split("\n"):
-        screen.centre(line, y, curses.color_pair(1))
+    for line in piconga.split("\n"):
+        screen.centre(line, y, curses.COLOR_CYAN)
         y += 1
+    y += 5
+    screen.centre("An open source project for the:", y, curses.COLOR_CYAN)
+    y += 5
+    for line in raspberry.split("\n"):
+        screen.centre(line, y)
+        y += 1
+    y += 5
+    for line in titles.split("\n"):
+        screen.centre(line, y, curses.COLOR_CYAN)
+        y += 1
+
+    # Figure out how long the credits need to roll.
+    SCROLL_RATE = 5
+    FRAMES = y * SCROLL_RATE
 
     # Add in our special effects
     effects = []
-    effects.append(Scroll(screen, 5))
-    effects.append(Stars(screen, 1000))
+    effects.append(Scroll(screen, SCROLL_RATE))
+    effects.append(Stars(screen, screen.buffer_height))
+    effects.append(Cycle(screen, piconga, screen.height))
 
     # Run those credits!
-    for frame in range(500):
+    for frame in range(FRAMES):
         for effect in effects:
             effect.update(frame)
         screen.refresh()
