@@ -74,3 +74,43 @@ class Conga(object):
         participant.add_destination(next)
 
         return
+
+    def leave(self, participant, participant_id):
+        """
+        Have a particular participant leave this Conga. Their position in this
+        conga is defined by their participant ID.
+
+        Finds the participant in the current conga. Takes the person before
+        them and sets their new target to the person after them.
+        """
+        # Find the participant.
+        match = False
+
+        for index, person in enumerate(self.participants):
+            if person[0] == participant_id:
+                match = True
+                break
+
+        if not match:
+            raise RuntimeError("Participant %s not in Conga", participant_id)
+
+        if person == self.participants[0]:
+            # Special case: participant at 'start' of Conga.
+            prev = self.participants[-1][1]
+            next = self.participants[1][1]
+        elif person == self.participants[-1]:
+            # Special case: person at 'end' of Conga.
+            prev = self.participants[-2][1]
+            next = self.participants[0][1]
+        else:
+            # Standard case.
+            prev = self.participants[index - 1][1]
+            next = self.participants[index + 1][1]
+
+        # Remove from message path.
+        prev.add_destination(next)
+
+        # Remove from the participant list.
+        self.participants.pop(index)
+
+        return
