@@ -7,6 +7,20 @@ Provides an abstraction of a single Conga on the Tornado Server. Each Conga
 object provides detailed knowledge of how Congas are constructed from
 Participants.
 """
+__congas = {}
+
+
+def conga_from_id(conga_id):
+    """
+    Given a conga_id, returns the corresponding Conga object.
+    """
+    try:
+        conga = __congas[conga_id]
+    except KeyError:
+        conga = Conga(conga_id)
+        __congas[conga_id] = conga
+
+    return conga
 
 
 class Conga(object):
