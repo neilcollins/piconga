@@ -5,6 +5,7 @@ tornado_server.participant
 
 Defines the representation of a single participant in a conga.
 """
+from conga import Conga, conga_from_id
 # Define some states for the Participant connection.
 OPENING = 0
 UP = 1
@@ -109,6 +110,7 @@ class Participant(object):
         """
         def callback(data):
             try:
+                # Validate the participant against the DB.
                 received_id = headers['User-ID']
                 conga_id = self.db.get(
                     "SELECT conga_id FROM conga_congamember WHERE id=%s",
@@ -116,9 +118,13 @@ class Participant(object):
                 )[0][0]
 
                 # At this stage we've successfully validated this participant.
-                # Add them to the conga and bring them up.
+                # Bring them up.
                 self.participant_id = received_id
                 self.state = UP
+
+                # Join the conga.
+                conga = conga_from_id(conga_id)
+                conga.join(self, received_id)
             except (KeyError, IndexError):
                 # This will catch a missing User-ID as well as a failed SQL
                 # lookup.
