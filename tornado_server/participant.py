@@ -101,8 +101,7 @@ class Participant(object):
 
     def _hello(self, headers):
         """
-        Builds a closure for use as a registration callback. This closure is
-        actually really minor, but we do it anyway to keep the interface.
+        Builds a closure for use as a registration callback.
 
         Note that this closure does not take the header data but the actual
         headers dictionary. This is deliberate: we'll actually use the headers
