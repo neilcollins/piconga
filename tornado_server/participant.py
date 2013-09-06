@@ -124,7 +124,7 @@ class Participant(object):
 
                 # Join the conga.
                 conga = conga_from_id(conga_id)
-                conga.join(self, received_id)
+                conga.join(self, int(received_id))
             except (KeyError, IndexError):
                 # This will catch a missing User-ID as well as a failed SQL
                 # lookup.
