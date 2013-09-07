@@ -86,7 +86,7 @@ class Participant(object):
         if (request_uri == 'HELLO') and (self.state == OPENING):
             cb = self._hello(headers)
         elif (request_uri == 'BYE') and (self.state == UP):
-            pass
+            cb = self._bye(headers)
         elif (request_uri == 'MSG') and (self.state == UP):
             # This is a simple message, so we just want to repeat it.
             cb = self._repeat_data(header_data)
@@ -129,6 +129,15 @@ class Participant(object):
                 # lookup.
                 self.source_stream.close()
                 self.state = CLOSING
+
+        return callback
+
+    def _bye(self, headers):
+        """
+        Builds a closure for execution on receipt of a conga BYE.
+        """
+        def callback(data):
+            pass
 
         return callback
 
