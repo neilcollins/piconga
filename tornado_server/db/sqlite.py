@@ -60,7 +60,7 @@ class Database(object):
         # Munge the string, removing the %s characters and adding the ?
         # instead. There is a bug here if we ever need literal % chars: let's
         # just never need them, eh?
-        query.replace("%%s", "?")
+        query = query.replace("%s", "?")
 
         cursor = self.conn.cursor()
         cursor.execute(query, parameters)
