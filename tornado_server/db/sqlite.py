@@ -65,4 +65,6 @@ class Database(object):
         cursor = self.conn.cursor()
         cursor.execute(query, parameters)
 
+        self.conn.commit()
+
         return
