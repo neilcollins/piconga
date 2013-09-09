@@ -33,6 +33,9 @@ class Participant(object):
         #: The ID of this particular conga participant.
         self.participant_id = None
 
+        #: The ID of the conga.
+        self.conga_id = None
+
     def add_destination(self, destination):
         """
         Add a new conga participant as the target for any incoming conga
@@ -118,12 +121,13 @@ class Participant(object):
 
                 # At this stage we've successfully validated this participant.
                 # Bring them up.
-                self.participant_id = received_id
+                self.participant_id = int(received_id)
+                self.conga_id = conga_id
                 self.state = UP
 
                 # Join the conga.
                 conga = conga_from_id(conga_id)
-                conga.join(self, int(received_id))
+                conga.join(self, self.participant_id)
             except (KeyError, IndexError):
                 # This will catch a missing User-ID as well as a failed SQL
                 # lookup.
