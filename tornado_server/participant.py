@@ -94,7 +94,10 @@ class Participant(object):
             # This is a simple message, so we just want to repeat it.
             cb = self._repeat_data(header_data)
         else:
-            raise RuntimeError("Unexpected verb.")
+            raise RuntimeError(
+                "Unexpected verb %s on participant %s in state %d." %
+                (request_uri, self.participant_id, self.state)
+            )
 
         self.source_stream.read_bytes(length, cb)
 
