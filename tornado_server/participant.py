@@ -149,7 +149,19 @@ class Participant(object):
         Builds a closure for execution on receipt of a conga BYE.
         """
         def callback(data):
-            pass
+            # Begin by dumping ourselves out of the conga, so that we don't
+            # receive any more messages.
+            conga = conga_from_id(self.conga_id)
+            conga.leave(self, self.participant_id)
+
+            # Now remove ourselves from the DB.
+            self.db.execute("DELETE FROM conga_congamember WHERE id=%s",
+                            (self.participant_id,))
+
+            # Finally, close the connection here.
+            self.destination = None
+            self.source_stream.close()
+            self.state = CLOSING
 
         return callback
 
