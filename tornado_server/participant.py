@@ -5,6 +5,7 @@ tornado_server.participant
 
 Defines the representation of a single participant in a conga.
 """
+from tornado.iostream import StreamClosedError
 from conga import Conga, conga_from_id
 # Define some states for the Participant connection.
 OPENING = 0
@@ -58,7 +59,11 @@ class Participant(object):
         Read from the incoming stream until we receive the delimiter that tells
         us that the headers have ended.
         """
-        self.source_stream.read_until(b'\r\n\r\n', self._parse_headers)
+        try:
+            self.source_stream.read_until(b'\r\n\r\n', self._parse_headers)
+        except StreamClosedError:
+            if self.state != CLOSING:
+                raise
 
     def _parse_headers(self, header_data):
         """
@@ -156,6 +161,10 @@ class Participant(object):
         we don't confuse clients by sending headers with no following body.
         """
         def callback(data):
-            self.destination.write(header_data + data)
+            try:
+                self.destination.write(header_data + data)
+            except StreamClosedError:
+                if self.state != CLOSING:
+                    raise
 
         return callback
