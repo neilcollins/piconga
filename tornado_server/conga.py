@@ -106,6 +106,12 @@ class Conga(object):
         # Find the participant.
         match = False
 
+        # There's a special case here: if the conga has only one participant.
+        # Handle that case.
+        if len(self.participants) == 1:
+            self.participants.pop()
+            return
+
         for index, person in enumerate(self.participants):
             if person[0] == participant_id:
                 match = True
