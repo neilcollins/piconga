@@ -110,7 +110,7 @@ class Participant(object):
         if self.state != CLOSING:
             self.wait_for_headers()
 
-    def _hello(self, headers):
+    def _hello(self, headers={}):
         """
         Builds a closure for use as a registration callback.
 
@@ -144,7 +144,7 @@ class Participant(object):
 
         return callback
 
-    def _bye(self, headers):
+    def _bye(self, headers={}):
         """
         Builds a closure for execution on receipt of a conga BYE.
         """
