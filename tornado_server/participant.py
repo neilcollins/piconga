@@ -63,7 +63,8 @@ class Participant(object):
             self.source_stream.read_until(b'\r\n\r\n', self._parse_headers)
         except StreamClosedError:
             if self.state != CLOSING:
-                raise
+                # Unexpected closure: run the Bye logic.
+                self._bye()('')
 
     def _parse_headers(self, header_data):
         """
@@ -180,6 +181,7 @@ class Participant(object):
                 self.destination.write(header_data + data)
             except StreamClosedError:
                 if self.state != CLOSING:
-                    raise
+                    # Unexpected closure: run the BYE logic.
+                    self._bye()('')
 
         return callback
