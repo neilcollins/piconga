@@ -160,7 +160,10 @@ class Participant(object):
 
             # Finally, close the connection here.
             self.destination = None
-            self.source_stream.close()
+
+            if not self.source_stream.closed():
+                self.source_stream.close()
+
             self.state = CLOSING
 
         return callback
