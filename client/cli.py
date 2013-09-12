@@ -11,11 +11,68 @@ import curses
 import subprocess
 import multiprocessing
 
+# Menu definitions.
+class Menu(object):
+    """Menu in the CLI hierarchy."""
+    
+    def __init__(self, name):
+        """Constructor.  Store the input parameters."""
+        
+        # Name of the item - this text appears in the menu.
+        self.name = name
+        
+        # Parent menu.  Initialises to None - if this is any menu other than
+        # the main menu, this MUST be changed to something else before running
+        # the CLI, otherwise the client will exit on selecting it!
+        self.parent = None
+        
+        # List of items to offer from this menu.
+        self.menu_items = []
+        
+        return
+
+    def verify(self):
+        """Assert that the menu has at least one item and that no two items
+        share the same trigger."""
+        
+        assert len(self.menu_items) > 0
+        
+        # Check that the list of triggers is the same length when we remove
+        # any duplicates from it.
+        triggers = [item.trigger for item in self.menu_items]
+        assert len(triggers) == len(set(triggers))
+        
+        return
+        
+        
+class MenuItem(object):
+    """Single item in a menu."""
+    
+    def __init__(self, trigger, text, next_menu, action):
+        """Constructor.  Store input parameters."""
+        
+        # Key that causes this action to be run.
+        self.trigger = trigger
+        
+        # Text to display in the menu for this item.
+        self.text = text
+        
+        # Next menu to move to when this item is selected.  Can be None to
+        # stay in this menu.
+        self.next_menu = next_menu
+        
+        # Action to send to the client loop on selecting this item.  Can be 
+        # None to indicate that no action should be sent.
+        self.action = action
+        
+        return
+        
+
 class Cli(object):
     """Class representing the CLI as a whole."""
     
     # Class constants.
-    _INPUT_WIN_HEIGHT = 5
+    _INPUT_WIN_HEIGHT = 8
     
     class Event(object):
         """Event that may be sent to the CLI for display."""
@@ -49,8 +106,9 @@ class Cli(object):
         JOIN_CONGA = 1    # Join a conga.
         LEAVE_CONGA = 2   # Leave a conga.
         SEND_MSG = 3      # Send a message on the conga.
-        BEGIN_ENCRYPT = 4 # Start using encryption on messages.
-        END_ENCRYPT = 5   # Stop using encryption on messages.
+        
+        # List of all allowed actions.
+        allowed_actions = [QUIT, JOIN_CONGA, LEAVE_CONGA, SEND_MSG]
         
         def __init__(self, action_type, params):
             """Constructor.  Store action type and dictionary of params."""
@@ -59,7 +117,28 @@ class Cli(object):
             self.params = params
             
             return
+    
+    
+    class LostConnection(Exception):
+        """Exception to raise when we lose connection with the Tornado server.
+        """
+        
+        def __init__(self):
+            """Constructor."""
             
+            self.value = "Lost connection with the Tornado server."
+            return
+            
+            
+        def __str__(self):
+            return repr(self.value)
+    
+    
+    class ExitCli(Exception):
+        """Exception to raise when we want to quit the CLI cleanly."""
+        
+        pass
+    
     # Private functions.
     
     def __init__(self):
@@ -70,6 +149,7 @@ class Cli(object):
         self._input_win = None
         self._event_queue = multiprocessing.Queue()
         self._action_queue = multiprocessing.Queue()
+        self._current_menu = main_menu
         
         return
         
@@ -109,17 +189,149 @@ class Cli(object):
         return
     
     
+    def _print_to_win(self, text, win, attrs=curses.color_pair(0)):
+        """Print text to the bottom of a given window, scrolling it as
+        necessary.
+        """
+        
+        # Work out where the bottom of the event window is so that we can
+        # print it there.
+        (height, width) = self._event_win.getmaxyx()
+        bottom_line = height
+        
+        event_lines = (len(text) / width) + 1
+            printed = 0
+            while printed < len(text):
+                still_to_print = len(text[printed:])
+                to_print_now = min(still_to_print, width)
+                win.addstr(bottom_line,
+                           1,
+                           event.text[printed:printed+to_print_now],
+                           attrs)
+                win.scroll(1)
+                printed += to_print_now 
+        return
+        
+        
     def _process_event(self, event):
         """Take appropriate action for a received event."""
         
-        ### MORE CODE TO GO HERE
-        
-        
+        # Our behaviour depends on what kind of event we have received.
+        if event.event_type == Cli.Event.TEXT:
+            # Simple text event.  Just print it to the event window.
+            self._print_to_win(event.text, self._event_win)
+        elif event.event_type == Cli.Event.MSG_RECVD:
+            # Received a message on the conga.  Print a notification.
+            self._print_to_win("Received a message:",
+                               self._event_win,
+                               curses.color_pair(1))
+            
+            # Now print the message itself.
+            self._print_to_win(event.text, self._event_win)
+        elif event.event_type == Cli.Event.CONGA_JOINED:
+            # Joined a conga.  Print a notification.
+            self._print_to_win("Joined a conga:",
+                               self._event_win,
+                               curses.color_pair(2))
+            
+            # Now print information about the conga.
+            self._print_to_win(event.text, self._event_win)               
+        elif event.event_type == Cli.Event.CONGA_LEFT:
+            # Left a conga.  Print a notification.
+            self._print_to_win("Left the conga.",
+                               self._event_win,
+                               curses.color_pair(3))
+        elif event.event_type == Cli.Event.LOST_CONN:
+            # Lost connection with the server.  Drop out.
+            raise Cli.LostConnection
+        else:
+            # Unhandled event.  This shouldn't happen.  Raise an exception.
+            raise TypeError("Unhandled CLI event type.")
+            
+        return
+    
+    
     def _process_input(self, input):
         """Process a keypress from the user."""
         
-        ### MORE CODE TO GO HERE
+        # Check that input is a single character and convert it to upper-case.
+        assert len(input) == 1, "Input is not a single character."
+        char = input.upper()
+        
+        # If the input is not available from the current menu (and isn't X, 
+        # which exits the menu), ignore it.
+        if char not in ([item.trigger for item in 
+                                       self._current_menu.menu_items] + ["X"]):
+            return
+        
+        # If the user pressed "X", drop out of this menu (or the CLI).
+        if char == "X":
+            # Move to the parent menu of this one.  If there is no parent,
+            # exit the CLI.
+            if self._current_menu.parent is not None:
+                self._current_menu = self._current_menu.parent
+            else:
+                raise Cli.ExitCli
+        else:
+            # The user must have pressed a key associated with one of the
+            # menu items.  Trigger the associated action.
+            selected_item = None
+            for item in self._current_menu.menu_items:
+                if char == item.trigger:
+                    selected_item = item
+            
+            if selected_item is None:
+                # Invalid input.  This should be impossible.  Assert.
+                raise AssertionError, "Input invalid for this menu."
+                
+            if selected_item.action is not None:
+                # Put the action on the queue.  No actions currently have
+                # associated parameters.
+                self._action_queue.put(Cli.Action(selected_item.action, None))
+                
+            # Move to the menu specified by the item.
+            self._current_menu = selected_item.next_menu
+                
+        return
     
+    
+    def _display_menu(self):
+        """Print out the current menu in the input window."""       
+        
+        menu = self._current_menu
+        
+        # Clear the window - we don't want bits of the previous menu hanging
+        # around.
+        self._input_win.erase()
+        
+        # Print the name of the current menu.
+        self._input_win.addstr(1, 1, menu.name)
+        
+        # Print each of the menu items in turn.
+        line = 3  # Name is on line 1, line 2 is blank
+        for item in menu.menu_items:
+            self._input_win.addstr(line,
+                                   1,
+                                   "%s  %s" % (item.trigger, item.text))
+            line += 1
+            
+        # Print the "back" option ("exit" if we're in the main menu).
+        if menu is main_menu:
+            back_text = "Exit PiConga"
+        else:
+            back_text = "Back to the previous menu"
+        self._input_win.addstr(line, 1, "X " + back_text)
+        
+        # Print the input summary at the bottom of the input window.
+        (height, width) = self._input_win.getmaxyx()
+        avail_triggers = [item.trigger for item in menu.menu_items]
+        triggers_txt_list = ", ".join(avail_triggers)
+        self._input_win.addstr(height,
+                               1,
+                               "Press %s or X." % triggers_txt_list)
+        
+        return
+        
     
     def _cli_loop(self, event_win, input_win):
         """Main CLI loop.  Display any new events and look for any user input.
@@ -144,6 +356,15 @@ class Cli(object):
                 self._process_event(next_event)
             except multiprocessing.Queue.Empty:
                 next_event = None
+            except Cli.LostConnection:
+                self._action_queue.put(Cli.Action.QUIT,
+                                   {"text": 
+                                   "Lost connection to the Tornado server."})
+                return
+            except Cli.ExitCli:
+                self._action_queue.put(Cli.Action.QUIT,
+                                       {"text": "Exited the CLI."})
+                return 
 
             # Get user input and process it, if there is any.
             input = input_win.getch()
@@ -154,7 +375,7 @@ class Cli(object):
             event_win.refresh()
             input_win.refresh()
             
-        return
+        return None
         
         
     def _start_cli(self, main_window):
@@ -177,8 +398,13 @@ class Cli(object):
         # The input window needs to respond to input instantly.
         input_win.nodelay(1)
         
+        # Set up some colour pairs to use for printing events.
+        curses.init_pair(1, curses.COLOR_RED, curses.COLOR_BLACK)
+        curses.init_pair(2, curses.COLOR_BLUE, curses.COLOR_BLACK)
+        curses.init_pair(3, curses.COLOR_GREEN, curses.COLOR_BLACK)
+        
         # Start off the main loop.
-        self._cli_loop(event_win, input_win)
+        rc = self._cli_loop(event_win, input_win)
         
         return
         
@@ -224,4 +450,21 @@ class Cli(object):
             action = None
             
         return action
+ 
+ 
+# Define the CLI.  We do this at global scope so that the CLI can access it
+# easily, and so that we can easily swap it out or modify it.
+main_menu = Menu("Main Menu")
+in_conga = Menu("In-Conga actions")
+in_conga.parent = main_menu
+join_conga = MenuItem(trigger="J",
+                      text="Join a Conga",
+                      next_menu=in_conga,
+                      action=Cli.Action.JOIN_CONGA)
+leave_conga = MenuItem(trigger="L",
+                       text="Leave the Conga",
+                       next_menu=main_menu,
+                       action=Cli.Action.LEAVE_CONGA)
+cli_root.menu_items = [join_conga]
+in_conga.menu_items = [leave_conga]
         
