@@ -25,6 +25,7 @@ import signal
 from participant import Participant
 from db import Database
 
+
 def handle_signal(sig, frame):
     """
     Close everything down nicely.

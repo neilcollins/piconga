@@ -126,6 +126,86 @@ class Stars(Effect):
         for star in self._stars:
             star.update()
 
+class Trail(object):
+    """
+    Track a single trail  for a falling character effect (a la Matrix).
+    """
+
+    def __init__(self, screen, x):
+        """
+        Constructor.  Create tral for  column (x) on the screen.
+        """
+        self._screen = screen
+        self._x = x
+        self._y = 0
+        self._life = 0
+        self._rate = 0
+        self._clear = True
+        self._maybe_reseed()
+
+    def _maybe_reseed(self):
+        """
+        Randomnly create a new column once this one is finished.
+        """
+        self._y += self._rate
+        self._life -= 1
+        if self._life <= 0:
+            self._clear = not self._clear
+            self._rate = randint(1, 2)
+            if self._clear:
+                self._y = 0
+                self._life = self._screen.height / self._rate
+            else:
+                self._y = randint(0, self._screen.height / 2)
+                self._life = \
+                    randint(1, self._screen.height - self._y) / self._rate
+
+    def update(self):
+        """
+        Update that trail!
+        """
+        if self._clear:
+            for i in range(0, 3):
+                self._screen.putch(" ",
+                                   self._x,
+                                   self._screen._start_line + self._y + i)
+            self._maybe_reseed()
+        else:
+            for i in range(0, 3):
+                self._screen.putch(chr(randint(32, 126)), 
+                                   self._x,
+                                   self._screen._start_line + self._y + i,
+                                   curses.COLOR_GREEN)
+            for i in range(4, 6):
+                self._screen.putch(chr(randint(32, 126)),
+                                   self._x,
+                                   self._screen._start_line + self._y + i,
+                                   curses.COLOR_GREEN,
+                                   curses.A_BOLD)
+            self._maybe_reseed()
+
+class Matrix(object):
+    """
+    Matrix-like falling green letters.
+
+    WARNING: this will slow down dramatically on large screens.
+    """
+
+    def __init__(self, screen):
+        """
+        Constructor.  Create the starting point for the falling characters.
+        """
+        self._screen = screen
+        self._chars = [Trail(screen, x) for x in range(screen.width)]
+
+    def update(self, frame_no):
+        """
+        Make those characters fall.
+        """
+        if (frame_no % 2 == 0):
+            for char in self._chars:
+                char.update()
+
 class Screen(object):
     """
     Class to track basic state of the screen.
@@ -149,6 +229,9 @@ class Screen(object):
         # Disable the cursor.
         curses.curs_set(0)
 
+        # Non-blocking key checks.
+        self._pad.nodelay(1)
+
     def scroll(self):
         """
         Scroll up one line.
@@ -167,21 +250,29 @@ class Screen(object):
                           self.height - 1,
                           self.width - 1)
 
-    def putch(self, str, x, y, attr=0):
+    def getch(self):
         """
-        Print the text (str) at the specified location (y, x).
+        Check for a key without waiting.
         """
-        self._pad.addstr(y, x, str, attr)
+        return self._pad.getch()
 
-    def centre(self, str, y, attr=0):
+    def putch(self, str, x, y, colour=0, attr=0):
+        """
+        Print the text (str) at the specified location (y, x) using the 
+        specified colour and attributes.  See curses.A_... for attributes.
+        """
+        self._pad.addstr(y, x, str, curses.color_pair(colour) | attr)
+
+    def centre(self, str, y, colour=0, attr=0):
         """
         Centre the text (str) on the specified line (y) using the optional
-        attributes (attr).
+        colour (colour) and attributes (attr).  See curses.A_... for a list of
+        valid attributes.
 
         This function will convert ${n} into colour attribute n for any
         subseqent text in the line, thus allowing multi-coloured text.
         """
-        segments = [["", attr]]
+        segments = [["", colour]]
         line = str
         while True:
             match = re.match(r"(.*?)\$[{](\d+)[}]", line)
@@ -195,7 +286,7 @@ class Screen(object):
 
         x = (self.width - total_width)/2
         for (text, style) in segments:
-            self._pad.addstr(y, x, text, curses.color_pair(style))
+            self._pad.addstr(y, x, text, curses.color_pair(style) | attr)
             x += len(text)
 
     def is_visible(self, x, y):
@@ -285,11 +376,19 @@ def credits(win):
     effects.append(Stars(screen, screen.buffer_height))
     effects.append(Cycle(screen, piconga, screen.height))
 
+    matrix = []
+    matrix.append(Matrix(screen))
+
     # Run those credits!
     for frame in range(FRAMES):
         for effect in effects:
             effect.update(frame)
         screen.refresh()
+        c = screen.getch()
+        if c in (ord("M"), ord("m")):
+            effects = matrix
+        elif c in (ord("Q"), ord("q")):
+            return
         curses.napms(50)
 
 # Temporary mainline

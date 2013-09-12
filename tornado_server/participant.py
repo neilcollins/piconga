@@ -5,6 +5,8 @@ tornado_server.participant
 
 Defines the representation of a single participant in a conga.
 """
+from tornado.iostream import StreamClosedError
+from conga import Conga, conga_from_id
 # Define some states for the Participant connection.
 OPENING = 0
 UP = 1
@@ -32,6 +34,9 @@ class Participant(object):
         #: The ID of this particular conga participant.
         self.participant_id = None
 
+        #: The ID of the conga.
+        self.conga_id = None
+
     def add_destination(self, destination):
         """
         Add a new conga participant as the target for any incoming conga
@@ -54,7 +59,12 @@ class Participant(object):
         Read from the incoming stream until we receive the delimiter that tells
         us that the headers have ended.
         """
-        self.source_stream.read_until(b'\r\n\r\n', self._parse_headers)
+        try:
+            self.source_stream.read_until(b'\r\n\r\n', self._parse_headers)
+        except StreamClosedError:
+            if self.state != CLOSING:
+                # Unexpected closure: run the Bye logic.
+                self._bye()('')
 
     def _parse_headers(self, header_data):
         """
@@ -85,12 +95,15 @@ class Participant(object):
         if (request_uri == 'HELLO') and (self.state == OPENING):
             cb = self._hello(headers)
         elif (request_uri == 'BYE') and (self.state == UP):
-            pass
+            cb = self._bye(headers)
         elif (request_uri == 'MSG') and (self.state == UP):
             # This is a simple message, so we just want to repeat it.
             cb = self._repeat_data(header_data)
         else:
-            raise RuntimeError("Unexpected verb.")
+            raise RuntimeError(
+                "Unexpected verb %s on participant %s in state %d." %
+                (request_uri, self.participant_id, self.state)
+            )
 
         self.source_stream.read_bytes(length, cb)
 
@@ -98,10 +111,9 @@ class Participant(object):
         if self.state != CLOSING:
             self.wait_for_headers()
 
-    def _hello(self, headers):
+    def _hello(self, headers={}):
         """
-        Builds a closure for use as a registration callback. This closure is
-        actually really minor, but we do it anyway to keep the interface.
+        Builds a closure for use as a registration callback.
 
         Note that this closure does not take the header data but the actual
         headers dictionary. This is deliberate: we'll actually use the headers
@@ -109,6 +121,7 @@ class Participant(object):
         """
         def callback(data):
             try:
+                # Validate the participant against the DB.
                 received_id = headers['User-ID']
                 conga_id = self.db.get(
                     "SELECT conga_id FROM conga_congamember WHERE id=%s",
@@ -116,14 +129,43 @@ class Participant(object):
                 )[0][0]
 
                 # At this stage we've successfully validated this participant.
-                # Add them to the conga and bring them up.
-                self.participant_id = received_id
+                # Bring them up.
+                self.participant_id = int(received_id)
+                self.conga_id = conga_id
                 self.state = UP
+
+                # Join the conga.
+                conga = conga_from_id(conga_id)
+                conga.join(self, self.participant_id)
             except (KeyError, IndexError):
                 # This will catch a missing User-ID as well as a failed SQL
                 # lookup.
                 self.source_stream.close()
                 self.state = CLOSING
+
+        return callback
+
+    def _bye(self, headers={}):
+        """
+        Builds a closure for execution on receipt of a conga BYE.
+        """
+        def callback(data):
+            # Begin by dumping ourselves out of the conga, so that we don't
+            # receive any more messages.
+            conga = conga_from_id(self.conga_id)
+            conga.leave(self, self.participant_id)
+
+            # Now remove ourselves from the DB.
+            self.db.execute("DELETE FROM conga_congamember WHERE id=%s",
+                            (self.participant_id,))
+
+            # Finally, close the connection here.
+            self.destination = None
+
+            if not self.source_stream.closed():
+                self.source_stream.close()
+
+            self.state = CLOSING
 
         return callback
 
@@ -135,6 +177,11 @@ class Participant(object):
         we don't confuse clients by sending headers with no following body.
         """
         def callback(data):
-            self.destination.write(header_data + data)
+            try:
+                self.destination.write(header_data + data)
+            except StreamClosedError:
+                if self.state != CLOSING:
+                    # Unexpected closure: run the BYE logic.
+                    self._bye()('')
 
         return callback
