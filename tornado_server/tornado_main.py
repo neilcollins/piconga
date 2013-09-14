@@ -21,6 +21,7 @@ To this end, we are using Tornado to build a very simple TCP proxy.
 """
 from tornado.tcpserver import TCPServer
 from tornado.ioloop import IOLoop
+import tornado.options
 import signal
 from participant import Participant
 from db import Database
@@ -68,7 +69,11 @@ class TCPProxy(TCPServer):
 if __name__ == '__main__':
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
+
+    tornado.options.parse_command_line()
+
     proxy = TCPProxy('server/piconga.db')
     proxy.listen(8888)
     IOLoop.instance().start()
+
     IOLoop.instance().close()
