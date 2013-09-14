@@ -10,6 +10,7 @@
 import curses
 import subprocess
 import multiprocessing
+import Queue
 
 # Menu definitions.
 class Menu(object):
@@ -131,6 +132,7 @@ class Cli(object):
             
             
         def __str__(self):
+            """String representation of this error."""
             return repr(self.value)
     
     
@@ -157,7 +159,10 @@ class Cli(object):
     def _get_term_dimensions(self):
         """Return the current dimensions of the terminal."""
         
-        dimens_text = subprocess.check_output(["stty", "size"]).split()
+        stty_proc = subprocess.Popen(["stty", "size"], 
+                                     stdout=subprocess.PIPE)
+        (stdout, stderr) = stty_proc.communicate()                                
+        dimens_text = stdout.split()
         dimensions = [int(token) for token in dimens_text]
         
         return tuple(dimensions)
@@ -189,10 +194,14 @@ class Cli(object):
         return
     
     
-    def _print_to_win(self, text, win, attrs=curses.color_pair(0)):
+    def _print_to_win(self, text, win, attrs=None):
         """Print text to the bottom of a given window, scrolling it as
         necessary.
         """
+        
+        # If there were no attributes specified, use the default colours.
+        if attrs is None:
+            attrs = curses.color_pair(0)
         
         # Work out where the bottom of the event window is so that we can
         # print it there.
@@ -200,16 +209,16 @@ class Cli(object):
         bottom_line = height
         
         event_lines = (len(text) / width) + 1
-            printed = 0
-            while printed < len(text):
-                still_to_print = len(text[printed:])
-                to_print_now = min(still_to_print, width)
-                win.addstr(bottom_line,
-                           1,
-                           event.text[printed:printed+to_print_now],
-                           attrs)
-                win.scroll(1)
-                printed += to_print_now 
+        printed = 0
+        while printed < len(text):
+            still_to_print = len(text[printed:])
+            to_print_now = min(still_to_print, width)
+            win.addstr(bottom_line,
+                       1,
+                       event.text[printed:printed+to_print_now],
+                       attrs)
+            win.scroll(1)
+            printed += to_print_now 
         return
         
         
@@ -354,7 +363,7 @@ class Cli(object):
             try:
                 next_event = self._event_queue.get(block=False)
                 self._process_event(next_event)
-            except multiprocessing.Queue.Empty:
+            except Queue.Empty:
                 next_event = None
             except Cli.LostConnection:
                 self._action_queue.put(Cli.Action.QUIT,
@@ -383,17 +392,11 @@ class Cli(object):
         
         # First create the event window that receives events.  The window
         # starts at zero-size, we will resize it in the main loop.
-        event_win = main_window.subwin(begin_y=0,
-                                       begin_x=0,
-                                       nlines=0,
-                                       ncols=0)
+        event_win = main_window.subwin(0, 0, 0, 0)
         
         # Now create the input window, which displays the menu and takes input
         # from the user.  This also starts at zero-size and will be resized.
-        input_win = main_window.subwin(begin_y=0,
-                                       begin_x=0,
-                                       nlines=0
-                                       ncols=0)
+        input_win = main_window.subwin(0, 0, 0, 0)
         
         # The input window needs to respond to input instantly.
         input_win.nodelay(1)
@@ -429,7 +432,7 @@ class Cli(object):
         """
         
         # Check that the event is permitted.
-        assert event_type in self.Events.allowed_events
+        assert event_type in self.Event.allowed_events
         
         # Add the event to the queue.
         event = self.Event(event_type, text)
@@ -446,7 +449,7 @@ class Cli(object):
         
         try:
             action = self._action_queue.get(block=False)
-        except multiprocessing.Queue.Empty:
+        except Queue.Empty:
             action = None
             
         return action
@@ -465,6 +468,45 @@ leave_conga = MenuItem(trigger="L",
                        text="Leave the Conga",
                        next_menu=main_menu,
                        action=Cli.Action.LEAVE_CONGA)
-cli_root.menu_items = [join_conga]
+main_menu.menu_items = [join_conga]
 in_conga.menu_items = [leave_conga]
         
+        
+if __name__ == "__main__":
+    # Test routine.  Create a CLI and throw some events at it.
+    test_cli = Cli()
+    
+    # Start the CLI up in a separate process.
+    cli_proc = multiprocessing.Process(target=test_cli.run)
+    cli_proc.start()
+    
+    # Now throw some events at the CLI, and immediately report back any 
+    # messages we get from it.
+    from time import sleep
+    import sys
+    while True:
+        recvd_action = test_cli.get_action()
+        while recvd_action is not None:
+            if recvd_action.type == Cli.Action.JOIN_CONGA:
+                act_type = "Join Conga"
+            elif recvd_action.type == Cli.Action.LEAVE_CONGA:
+                act_type = "Leave Conga"
+            elif recvd_action.type == Cli.Action.QUIT:
+                cli_proc.join()
+                sys.exit()
+            test_cli.add_event(Cli.Event.TEXT,
+                               "Saw an action of type: %s" % act_type)
+        
+        test_cli.add_event(Cli.Event.MSG_RECVD,
+                           "This is a test message.")                           
+        sleep(1)
+    
+        test_cli.add_event(Cli.Event.CONGA_JOINED,
+                           "This is a test 'Conga Joined' message.")
+        sleep(1)
+        
+        test_cli.add_event(Cli.Event.CONGA_LEFT,
+                           "This is a test 'Conga Left' message.")
+        sleep(1)
+    
+    
