@@ -8,6 +8,7 @@ object provides detailed knowledge of how Congas are constructed from
 Participants.
 """
 import logging
+from tornado_exceptions import JoinError
 
 
 __congas = {}
@@ -87,7 +88,9 @@ class Conga(object):
 
             # Confirm that neither ID is the same as ours. That would be bad.
             if participant_id in (prev_id, next_id):
-                raise RuntimeError("Identical participant IDs: %s" % participant_id)
+                raise JoinError(
+                    "Identical participant IDs: %s" % participant_id
+                )
 
             # Insert ourselves into the participant list.
             self.participants.insert(index, (participant_id, participant))
