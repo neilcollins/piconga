@@ -7,6 +7,7 @@ Defines the representation of a single participant in a conga.
 """
 from tornado.iostream import StreamClosedError
 from conga import Conga, conga_from_id
+import logging
 # Define some states for the Participant connection.
 OPENING = 0
 UP = 1
@@ -64,6 +65,9 @@ class Participant(object):
         except StreamClosedError:
             if self.state != CLOSING:
                 # Unexpected closure: run the Bye logic.
+                logging.error(
+                    "Unexpected close by participant %d" % self.participant_id
+                )
                 self._bye()('')
 
     def _parse_headers(self, header_data):
@@ -182,6 +186,9 @@ class Participant(object):
             except StreamClosedError:
                 if self.state != CLOSING:
                     # Unexpected closure: run the BYE logic.
+                    logging.error(
+                        "Unexpected close by participant %d" % self.participant_id
+                    )
                     self._bye()('')
 
         return callback
