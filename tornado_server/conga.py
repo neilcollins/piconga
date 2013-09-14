@@ -7,6 +7,9 @@ Provides an abstraction of a single Conga on the Tornado Server. Each Conga
 object provides detailed knowledge of how Congas are constructed from
 Participants.
 """
+import logging
+
+
 __congas = {}
 
 
@@ -118,7 +121,12 @@ class Conga(object):
                 break
 
         if not match:
-            raise RuntimeError("Participant %s not in Conga", participant_id)
+            # Called on an incorrect conga. Log and bail early.
+            logging.error(
+                "Attempted to remove participant %s from incorrect conga %s." %
+                (participant_id, self.conga_id)
+            )
+            return
 
         if person == self.participants[0]:
             # Special case: participant at 'start' of Conga.
