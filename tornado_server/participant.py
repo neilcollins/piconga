@@ -165,9 +165,16 @@ class Participant(object):
             conga = conga_from_id(self.conga_id)
             conga.leave(self, self.participant_id)
 
-            # Now remove ourselves from the DB.
-            self.db.execute("DELETE FROM conga_congamember WHERE id=%s",
-                            (self.participant_id,))
+            # Now remove ourselves from the DB. If it fails, just log, but keep
+            # going.
+            try:
+                self.db.execute("DELETE FROM conga_congamember WHERE id=%s",
+                                (self.participant_id,))
+            except Exception, e:
+                logging.error(
+                    "Failed to remove %s from conga %s because of %s" %
+                    (self.participant_id, self.conga_id, e)
+                )
 
             # Finally, close the connection here.
             self.destination = None
