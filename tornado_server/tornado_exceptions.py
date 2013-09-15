@@ -13,3 +13,10 @@ class JoinError(ValueError):
     An attempt to join a conga has failed.
     """
     pass
+
+
+class LeaveError(ValueError):
+    """
+    An attempt to leave a conga has failed.
+    """
+    pass

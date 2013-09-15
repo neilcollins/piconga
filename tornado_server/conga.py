@@ -8,7 +8,7 @@ object provides detailed knowledge of how Congas are constructed from
 Participants.
 """
 import logging
-from tornado_exceptions import JoinError
+from tornado_exceptions import JoinError, LeaveError
 
 
 __congas = {}
@@ -133,7 +133,7 @@ class Conga(object):
                 "Attempted to remove participant %s from incorrect conga %s." %
                 (participant_id, self.conga_id)
             )
-            return
+            raise LeaveError("Not in conga.")
 
         if person == self.participants[0]:
             # Special case: participant at 'start' of Conga.
