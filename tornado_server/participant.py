@@ -147,7 +147,8 @@ class Participant(object):
                 # This will catch a missing User-ID as well as a failed SQL
                 # lookup.
                 logging.error(
-                    "Hit exception %s adding participant to conga." % e
+                    "Hit exception %s adding participant %s to conga %s." %
+                    (e, self.participant_id, conga_id)
                 )
 
                 self.source_stream.close()
