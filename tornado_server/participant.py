@@ -7,6 +7,7 @@ Defines the representation of a single participant in a conga.
 """
 from tornado.iostream import StreamClosedError
 from conga import Conga, conga_from_id
+from tornado_exceptions import JoinError
 import logging
 # Define some states for the Participant connection.
 OPENING = 0
@@ -153,6 +154,10 @@ class Participant(object):
 
                 self.source_stream.close()
                 self.state = CLOSING
+            except JoinError:
+                # The attempt to join the conga failed. Close up, and
+                # additionally run the BYE logic.
+                self._bye()('')
 
         return callback
 
