@@ -88,6 +88,10 @@ class Conga(object):
 
             # Confirm that neither ID is the same as ours. That would be bad.
             if participant_id in (prev_id, next_id):
+                logging.error(
+                    "Attempted to add duplicate participant %s." %
+                    (participant_id, self.conga_id)
+                )
                 raise JoinError(
                     "Identical participant IDs: %s" % participant_id
                 )
