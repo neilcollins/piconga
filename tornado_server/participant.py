@@ -7,7 +7,7 @@ Defines the representation of a single participant in a conga.
 """
 from tornado.iostream import StreamClosedError
 from conga import Conga, conga_from_id
-from tornado_exceptions import JoinError
+from tornado_exceptions import JoinError, LeaveError
 import logging
 # Define some states for the Participant connection.
 OPENING = 0
@@ -167,9 +167,16 @@ class Participant(object):
         """
         def callback(data):
             # Begin by dumping ourselves out of the conga, so that we don't
-            # receive any more messages.
-            conga = conga_from_id(self.conga_id)
-            conga.leave(self, self.participant_id)
+            # receive any more messages. If this fails, log the failure but
+            # keep going.
+            try:
+                conga = conga_from_id(self.conga_id)
+                conga.leave(self, self.participant_id)
+            except LeaveError, e:
+                logging.error(
+                    "Failed to remove %s from conga %s because of %s" %
+                    (self.participant_id, self.conga_id, e)
+                )
 
             # Now remove ourselves from the DB. If it fails, just log, but keep
             # going.
