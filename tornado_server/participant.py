@@ -143,9 +143,13 @@ class Participant(object):
                 # Join the conga.
                 conga = conga_from_id(conga_id)
                 conga.join(self, self.participant_id)
-            except (KeyError, IndexError):
+            except (KeyError, IndexError), e:
                 # This will catch a missing User-ID as well as a failed SQL
                 # lookup.
+                logging.error(
+                    "Hit exception %s adding participant to conga." % e
+                )
+
                 self.source_stream.close()
                 self.state = CLOSING
 
