@@ -8,6 +8,7 @@ Defines the representation of a single participant in a conga.
 from tornado.iostream import StreamClosedError
 from conga import Conga, conga_from_id
 from tornado_exceptions import JoinError, LeaveError
+from decorators import bye_on_error, bye_on_error_cb
 import logging
 # Define some states for the Participant connection.
 OPENING = 0
@@ -39,6 +40,7 @@ class Participant(object):
         #: The ID of the conga.
         self.conga_id = None
 
+    @bye_on_error
     def add_destination(self, destination):
         """
         Add a new conga participant as the target for any incoming conga
@@ -46,6 +48,7 @@ class Participant(object):
         """
         self.destination = destination
 
+    @bye_on_error
     def write(self, data):
         """
         Write data on the downstream connection. If no such connection exists,
@@ -56,6 +59,7 @@ class Participant(object):
         except AttributeError:
             pass
 
+    @bye_on_error
     def wait_for_headers(self):
         """
         Read from the incoming stream until we receive the delimiter that tells
@@ -71,6 +75,7 @@ class Participant(object):
                 )
                 self._bye()('')
 
+    @bye_on_error
     def _parse_headers(self, header_data):
         """
         Turns the headers into a dictionary. Checks the content-length and
@@ -126,6 +131,7 @@ class Participant(object):
         headers dictionary. This is deliberate: we'll actually use the headers
         here, so there's no point parsing them twice.
         """
+        @bye_on_error_cb(self)
         def callback(data):
             try:
                 # Validate the participant against the DB.
@@ -206,6 +212,7 @@ class Participant(object):
         sending the headers, just in case the message is ill-formed. That way
         we don't confuse clients by sending headers with no following body.
         """
+        @bye_on_error_cb(self)
         def callback(data):
             try:
                 self.destination.write(header_data + data)
