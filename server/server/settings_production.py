@@ -9,7 +9,7 @@
 from settings import *
 
 # No debug features please!
-DEBUG = True
+DEBUG = False
 TEMPLATE_DEBUG = DEBUG
 
 # Use postgres for the live back-end DB.
