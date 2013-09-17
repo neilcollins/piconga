@@ -3,6 +3,7 @@ from abc import ABCMeta, abstractmethod
 from random import randint
 import re
 
+
 class Effect(object):
     """
     Abstract class to handle a special effect on the screen.
@@ -15,6 +16,7 @@ class Effect(object):
         This effect will be called every time the mainline animator
         creates a new frame to display on the screen.
         """
+
 
 class Scroll(Effect):
     """
@@ -34,10 +36,15 @@ class Scroll(Effect):
         """
         Scroll the screen if required.
         """
-        if (frame_no - self._last_frame) >= self._rate:
+        # Note that the mainline is just N frames after the latest update.
+        # However, we also need to handle the case where the screen is reset
+        # between calls (and so look for frame numbers that are too small).
+        if ((frame_no - self._last_frame) >= self._rate or
+            frame_no < self._last_frame):
             self._screen.scroll()
             self._last_frame = frame_no
-        
+
+
 class Cycle(Effect):
     """
     Special effect to cycle the colours on a some specified text.
@@ -83,7 +90,7 @@ class Star(object):
         self._screen = screen
         self._cycle = randint(0, len(self._star_chars))
         (height, width) = self._screen._pad.getmaxyx()
-        while True: 
+        while True:
             self._x = randint(0, width-1)
             self._y = randint(0, height-1)
             if self._screen._pad.inch(self._y, self._x) == 32:
@@ -98,15 +105,16 @@ class Star(object):
             return
 
         self._cycle += 1
-	if self._cycle >= len(self._star_chars):
+        if self._cycle >= len(self._star_chars):
             self._cycle = 0
-   
+
         new_char = self._star_chars[self._cycle]
         if new_char == self._old_char:
             return
- 
+
         self._screen.putch(new_char, self._x, self._y)
         self._old_char = new_char
+
 
 class Stars(Effect):
     """
@@ -125,6 +133,7 @@ class Stars(Effect):
         """
         for star in self._stars:
             star.update()
+
 
 class Trail(object):
     """
@@ -172,7 +181,7 @@ class Trail(object):
             self._maybe_reseed()
         else:
             for i in range(0, 3):
-                self._screen.putch(chr(randint(32, 126)), 
+                self._screen.putch(chr(randint(32, 126)),
                                    self._x,
                                    self._screen._start_line + self._y + i,
                                    curses.COLOR_GREEN)
@@ -183,6 +192,7 @@ class Trail(object):
                                    curses.COLOR_GREEN,
                                    curses.A_BOLD)
             self._maybe_reseed()
+
 
 class Matrix(object):
     """
@@ -206,6 +216,7 @@ class Matrix(object):
             for char in self._chars:
                 char.update()
 
+
 class Screen(object):
     """
     Class to track basic state of the screen.
@@ -220,7 +231,6 @@ class Screen(object):
         (self.height, self.width) = self._screen.getmaxyx()
         self.buffer_height = 200
         self._pad = curses.newpad(self.buffer_height, self.width)
-        self._start_line = 0
 
         # Set up basic colour schemes.
         for i in range(curses.COLOR_RED, curses.COLOR_WHITE):
@@ -232,18 +242,28 @@ class Screen(object):
         # Non-blocking key checks.
         self._pad.nodelay(1)
 
+        # Ensure that the screen is clear and ready to go.
+        self.clear()
+
     def scroll(self):
         """
         Scroll up one line.
         """
         self._start_line += 1
 
+    def clear(self):
+        """
+        Clear the screen of all content.
+        """
+        self._pad.clear()
+        self._start_line = 0
+
     def refresh(self):
         """
         Refresh the screen.
         """
         (self.height, self.width) = self._screen.getmaxyx()
-        self._pad.refresh(self._start_line, 
+        self._pad.refresh(self._start_line,
                           0,
                           0,
                           0,
@@ -258,7 +278,7 @@ class Screen(object):
 
     def putch(self, str, x, y, colour=0, attr=0):
         """
-        Print the text (str) at the specified location (y, x) using the 
+        Print the text (str) at the specified location (y, x) using the
         specified colour and attributes.  See curses.A_... for attributes.
         """
         self._pad.addstr(y, x, str, curses.color_pair(colour) | attr)
@@ -293,8 +313,29 @@ class Screen(object):
         """
         Return whether the specified location is on the visible screen.
         """
-        return ((y >= self._start_line) and 
+        return ((y >= self._start_line) and
                 (y < self._start_line + self.height))
+
+    def create_credits(self):
+        # Create the basic credits to scroll.
+        self.clear()
+        y = self.height
+        for line in piconga.split("\n"):
+            self.centre(line, y, curses.COLOR_CYAN)
+            y += 1
+        y += 5
+        self.centre("An open source project for the:", y, curses.COLOR_CYAN)
+        y += 5
+        for line in raspberry.split("\n"):
+            self.centre(line, y)
+            y += 1
+        y += 5
+        for line in titles.split("\n"):
+            self.centre(line, y, curses.COLOR_CYAN)
+            y += 1
+        return y
+
+
 raspberry = """
 ${2}   .~~.   .~~.                                                         
 ${2}  '. \ ' ' / .'                                                        
@@ -348,48 +389,44 @@ Lance Robson
 How many hidden features can you find?
 """
 
+
 def credits(win):
-    # Create the basic credits to scroll.
-    screen = Screen(win)
-    y = screen.height
-    for line in piconga.split("\n"):
-        screen.centre(line, y, curses.COLOR_CYAN)
-        y += 1
-    y += 5
-    screen.centre("An open source project for the:", y, curses.COLOR_CYAN)
-    y += 5
-    for line in raspberry.split("\n"):
-        screen.centre(line, y)
-        y += 1
-    y += 5
-    for line in titles.split("\n"):
-        screen.centre(line, y, curses.COLOR_CYAN)
-        y += 1
 
-    # Figure out how long the credits need to roll.
+    # Speed for the scrolling credits
     SCROLL_RATE = 5
-    FRAMES = y * SCROLL_RATE
 
-    # Add in our special effects
-    effects = []
-    effects.append(Scroll(screen, SCROLL_RATE))
-    effects.append(Stars(screen, screen.buffer_height))
-    effects.append(Cycle(screen, piconga, screen.height))
+    # Create our basic screen and then prepare the special effects.
+    screen = Screen(win)
+    screen.create_credits()
+
+    normal = []
+    normal.append(Scroll(screen, SCROLL_RATE))
+    normal.append(Stars(screen, screen.buffer_height))
+    normal.append(Cycle(screen, piconga, screen.height))
 
     matrix = []
     matrix.append(Matrix(screen))
 
-    # Run those credits!
-    for frame in range(FRAMES):
-        for effect in effects:
-            effect.update(frame)
-        screen.refresh()
-        c = screen.getch()
-        if c in (ord("M"), ord("m")):
-            effects = matrix
-        elif c in (ord("Q"), ord("q")):
-            return
-        curses.napms(50)
+    # Start off with our normal set of effects active.
+    effects = normal
 
-# Temporary mainline
-curses.wrapper(credits)
+    # Run those credits!
+    while True:
+        # Create the basic credits to scroll.
+        FRAMES = screen.create_credits() * SCROLL_RATE
+
+        # Rutn throggh the whole lot for one loop.
+        for frame in range(FRAMES):
+            for effect in effects:
+                effect.update(frame)
+            screen.refresh()
+            c = screen.getch()
+            if c in (ord("M"), ord("m")):
+                effects = matrix
+            elif c in (ord("N"), ord("n")):
+                effects = normal
+            elif c in (ord("X"), ord("x")):
+                return
+            curses.napms(50)
+        if effects is normal:
+            return
