@@ -9,7 +9,7 @@ def add_user(session, username, password):
                'password': password,
                'mac': mac}
     headers = {'content-type': 'application/json'}
-    r = session.post('http://10.248.113.100:8000/conga/user/',
+    r = session.post('http://localhost/conga/user/',
                      data=json.dumps(payload),
                      headers=headers)
     return r
@@ -17,7 +17,7 @@ def add_user(session, username, password):
 def del_user(session, username, password):
     payload = {'username': username, 'password': password}
     headers = {'content-type': 'application/json'}
-    r = session.delete('http://10.248.113.100:8000/conga/user/',
+    r = session.delete('http://localhost/conga/user/',
                        data=json.dumps(payload),
                        headers=headers)
     return r
@@ -25,7 +25,7 @@ def del_user(session, username, password):
 def add_conga(session, name, password):
     payload = {'name': name, 'password': password}
     headers = {'content-type': 'application/json'}
-    r = session.post('http://10.248.113.100:8000/conga/conga/',
+    r = session.post('http://localhost/conga/conga/',
                      data=json.dumps(payload),
                      headers=headers)
     return r
@@ -33,14 +33,14 @@ def add_conga(session, name, password):
 def join_conga(session, name, password):
     payload = {'name': name, 'password': password}
     headers = {'content-type': 'application/json'}
-    r = session.put('http://10.248.113.100:8000/conga/conga/',
+    r = session.put('http://localhost/conga/conga/',
                     data=json.dumps(payload),
                     headers=headers)
     return r
 
 def del_conga(session, name, password):
     headers = {'content-type': 'application/json'}
-    r = session.delete('http://10.248.113.100:8000/conga/conga/'+name,
+    r = session.delete('http://localhost/conga/conga/'+name,
                        headers=headers)
     return r
 
@@ -52,7 +52,7 @@ s4 = requests.Session()
 
 # Check a rubbish request
 print "\nRubbish request"
-r = s1.get('http://10.248.113.100:8000/conga/user/')
+r = s1.get('http://localhost/conga/user/')
 print r.status_code, r.text, r.elapsed
 
 # Create the user on first registration
@@ -73,11 +73,11 @@ print r.status_code, r.text, r.elapsed
 
 # Get the user details
 print "\nRead user"
-r = s1.get('http://10.248.113.100:8000/conga/user/peter')
+r = s1.get('http://localhost/conga/user/peter')
 print r.status_code, r.text, r.elapsed
 
 # Get another user details - should fail?
-r = s2.get('http://10.248.113.100:8000/conga/user/peter')
+r = s2.get('http://localhost/conga/user/peter')
 print r.status_code, r.text, r.elapsed
 
 # Check overwrite does not work.
@@ -103,11 +103,11 @@ print r.status_code, r.text, r.elapsed
 
 # Get the conga details
 print "\nRead conga"
-r = s1.get('http://10.248.113.100:8000/conga/conga/New%20conga')
+r = s1.get('http://localhost/conga/conga/New%20conga')
 print r.status_code, r.text, r.elapsed
-r = s1.get('http://10.248.113.100:8000/conga/conga/conga2')
+r = s1.get('http://localhost/conga/conga/conga2')
 print r.status_code, r.text, r.elapsed
-r = s1.get('http://10.248.113.100:8000/conga/conga/conga1')
+r = s1.get('http://localhost/conga/conga/conga1')
 print r.status_code, r.text, r.elapsed
 
 print "\nPause...."

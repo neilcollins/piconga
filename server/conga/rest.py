@@ -90,6 +90,7 @@ def user(request, username):
     # Build up the resulting JSON for the user
     d = {
         "username": u.username,
+        "id": request.user.id,
         "host": u.congauser.host,
         "mac": u.congauser.mac,
     }
