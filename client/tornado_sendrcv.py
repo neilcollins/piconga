@@ -33,15 +33,14 @@ class TornadoSendRcv(object):
     
     # Private functions
     
-    def __init__(self, ip, port):
+    def __init__(self):
         """
         Constructor.  Store off the server IP and port.
         """
-        
-        self._server_ip = ip
-        self._server_port = port
-        
+ 
         # Create initial versions of all other internal class variables.
+        self._server_ip = None
+        self._server_port = None
         self._sock = None
         self._recv_queue = None
         
@@ -134,11 +133,15 @@ class TornadoSendRcv(object):
         
     # Public functions
     
-    def run(self):
+    def run(self, server_ip, server_port):
         """
         Connect to the server, set up the output queue, and kick off the
         receive loop.
         """
+        
+        # Store off the server IP and port.
+        self._server_ip = server_ip
+        self._server_port = server_port
         
         # Create the socket to connect to the server.  This is a standard IPv4
         # TCP socket.
