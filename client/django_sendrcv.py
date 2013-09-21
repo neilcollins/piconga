@@ -42,7 +42,8 @@ class DjangoSendRcv(object):
     # Public functions    
    
     def register_user(self, username, password):
-        """Register a user with the Django server."""
+        """Register a user with the Django server.  Returns the user's
+        User ID for joining Congas."""
         
         mac = ':'.join('%02X' %
                      ((getnode() >> 8*i) & 0xff) for i in reversed(xrange(6)))
@@ -57,8 +58,11 @@ class DjangoSendRcv(object):
         if r.status_code != 200:
             raise ServerError, "Registering user %s failed: %s" % (username,
                                                                    r.text)
+                                                                   
+        # Extract and return the user ID from the returned JSON.
+        json_dict = json.load(r.text)
         
-        return
+        return int(json_dict["id"])
         
         
     def unregister_user(self, username, password):
