@@ -517,10 +517,15 @@ class Cli(object):
         
     # Public functions.
     
-    def run(self):
+    def run(self, actions, events):
         """
         Start the CLI.
         """
+        # Remember the specified queues for interprocess comms.
+        self._action_queue = actions
+        self._event_queue = events
+
+        # Start the CLI.
         curses.wrapper(self._start_cli)
         
         return

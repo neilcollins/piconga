@@ -6,35 +6,36 @@
    
 # Python imports
 import json
+import requests
 from uuid import getnode
 
 # External library imports
 import requests
 
+class ServerError(Exception):
+    """Exception raised when the server returns an error."""
+    
+    def __init__(self, text):
+        """Constructor."""
+    
+        self.value = text
+        return
+        
+    def __str__(self):
+        """String representation of this error."""
+        return str(self.value)
+
+            
 class DjangoSendRcv(object):
     """Object to communicate with the Django server."""
     
-    class ServerError(Exception):
-        """Exception raised when the server returns an error."""
-        
-        def __init__(self):
-        """Constructor."""
-        
-        self.value = "Lost connection with the Tornado server."
-        return
-            
-            
-        def __str__(self):
-            """String representation of this error."""
-            return repr(self.value)
-            
-            
     # Private functions
     
     def __init__(self, base_url):
         """Constructor.  Save off the server's base URL."""
         
         self._base_url = base_url
+        self._session = requests.Session()
         
         return
         
@@ -51,16 +52,16 @@ class DjangoSendRcv(object):
                    'password': password,
                    'mac': mac}
         headers = {'content-type': 'application/json'}
-        r = session.post(self._base_url + '/user/',
-                         data=json.dumps(payload),
-                         headers=headers)
+        r = self._session.post(self._base_url + '/user/',
+                               data=json.dumps(payload),
+                               headers=headers)
         
         if r.status_code != 200:
             raise ServerError, "Registering user %s failed: %s" % (username,
                                                                    r.text)
                                                                    
         # Extract and return the user ID from the returned JSON.
-        json_dict = json.load(r.text)
+        json_dict = json.loads(r.text)
         
         return int(json_dict["id"])
         
@@ -73,9 +74,9 @@ class DjangoSendRcv(object):
         
         payload = {'username': username, 'password': password}
         headers = {'content-type': 'application/json'}
-        r = session.delete(self._base_url + '/user/',
-                           data=json.dumps(payload),
-                           headers=headers)
+        r = self._session.delete(self._base_url + '/user/',
+                                 data=json.dumps(payload),
+                                 headers=headers)
                            
         if r.status_code != 200:
             raise ServerError, "Unregistering user %s failed: %s" % (username,
@@ -84,20 +85,38 @@ class DjangoSendRcv(object):
         return
         
         
-    def join_conga(self, name, password):
-        """Join a Conga.  Note that the name parameter here is not the 
-        user's username, but the name of the Conga to create.  The password,
-        however, is the user's password.
+    def create_conga(self, name, password):
+        """Create a Conga.  Note that the parameters here are not the 
+        user's credentials, but those of the Conga to create.
         """
         
         payload = {'name': name, 'password': password}
         headers = {'content-type': 'application/json'}
-        r = session.put(self._base_url + '/conga/',
-                        data=json.dumps(payload),
-                        headers=headers)
+        r = self._session.post(self._base_url + '/conga/',
+                               data=json.dumps(payload),
+                               headers=headers)
                             
         if r.status_code != 200:
-            raise ServerError, "Joining conga failed: %s" % (r.text)
+            raise ServerError("Creating conga failed: (%d) %s" % 
+                              (r.status_code, r.text))
+            
+        return
+        
+        
+    def join_conga(self, name, password):
+        """Join a Conga.  Note that the parameters are those for the conga
+        when it was created and not those of the user trying to join the conga.
+        """
+        
+        payload = {'name': name, 'password': password}
+        headers = {'content-type': 'application/json'}
+        r = self._session.put(self._base_url + '/conga/',
+                              data=json.dumps(payload),
+                              headers=headers)
+                            
+        if r.status_code != 200:
+            raise ServerError("Joining conga failed: (%d) %s" % 
+                              (r.status_code, r.text))
             
         return
         
@@ -108,7 +127,7 @@ class DjangoSendRcv(object):
         """
         
         headers = {'content-type': 'application/json'}
-        r = session.delete(self._base_url + '/conga/'+name,
+        r = self._session.delete(self._base_url + '/conga/'+name,
                            headers=headers)
                            
         if r.status_code != 200:

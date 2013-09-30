@@ -144,8 +144,11 @@ def conga(request, name):
     elif request.method == "DELETE":
         # DELETE - i.e. conga deletion
         # Delete the conga and return blank page.
-        c = Conga.objects.get(name__iexact=name)
-        c.delete()
+        try:
+            c = Conga.objects.get(name__iexact=name)
+            c.delete()
+        except ObjectDoesNotExist:
+            pass
         return HttpResponse(status=200)
 
     # Default processing at this point is to return as per a "GET" request.
