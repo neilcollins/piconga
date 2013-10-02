@@ -11,9 +11,10 @@ import curses
 import subprocess
 import multiprocessing
 import Queue
+from time import sleep
 
 # PiConga imports
-from credits import credits
+from credits import credits, matrix
 
 # Menu definitions.
 class Menu(object):
@@ -38,7 +39,7 @@ class Menu(object):
         
         return
 
-    def verify(self):
+    def verify(self, global_menu):
         """
         Assert that the menu has at least one item and that no two items
         share the same trigger.
@@ -47,7 +48,8 @@ class Menu(object):
         
         # Check that the list of triggers is the same length when we remove
         # any duplicates from it.
-        triggers = [item.trigger for item in self.menu_items]
+        triggers = [item.trigger for item in
+             self.menu_items + global_menu.menu_items]
         assert len(triggers) == len(set(triggers))
         
         return
@@ -58,7 +60,7 @@ class MenuItem(object):
     Single item in a menu.
     """
     
-    def __init__(self, trigger, text, next_menu, action):
+    def __init__(self, trigger, text, next_menu, action, hidden=False):
         """
         Constructor.  Store input parameters.
         """
@@ -75,9 +77,21 @@ class MenuItem(object):
         # Action to send to the client loop on selecting this item.  Can be 
         # None to indicate that no action should be sent.
         self.action = action
+
+        # Whether this is a hidden menu item.
+        self.hidden = hidden
         
         return
 
+    def get_text(self):
+        """
+        Get text to display, translating any dynamic functions into text as
+        required.
+        """
+        if isinstance(self.text, str):
+            return self.text
+        else:
+            return self.text()
 
 class Event(object):
     """
@@ -149,6 +163,7 @@ class Action(object):
     allowed_actions = [QUIT,
                        CONNECT,
                        DISCONNECT,
+                       CREATE_CONGA,
                        JOIN_CONGA,
                        LEAVE_CONGA,
                        SEND_MSG]
@@ -193,7 +208,7 @@ class Cli(object):
     """
     
     # Class constants.
-    _INPUT_WIN_HEIGHT = 8
+    _INPUT_WIN_HEIGHT = 9
             
     class LostConnection(Exception):
         """
@@ -227,13 +242,59 @@ class Cli(object):
         """
         Constructor.
         """
+        # Menu for the CLI.
+        self.global_menu = Menu("Always active")
+        self.start_menu = Menu("Start Menu")
+        self.main_menu = Menu("Main Menu")
+        self.main_menu.parent = self.start_menu
+        self.in_conga = Menu("In-Conga actions")
+        self.in_conga.parent = self.main_menu
+        matrix = MenuItem(trigger="M",
+                          text="Enter the Matrix",
+                          next_menu="SAME",
+                          action=self._matrix,
+                          hidden=True)
+        exit_menu = MenuItem(trigger="X",
+                             text=self._exit_text,
+                             next_menu="PARENT",
+                             action=None)
+        about = MenuItem(trigger="A",
+                         text="About Pi Conga",
+                         next_menu="SAME",
+                         action=self._credits)
+        connect = MenuItem(trigger="C",
+                           text="Connect",
+                           next_menu=self.main_menu,
+                           action=Action.CONNECT)
+        disconnect = MenuItem(trigger="D",
+                              text="Disconnect",
+                              next_menu=self.start_menu,
+                              action=Action.DISCONNECT)
+        join_conga = MenuItem(trigger="J",
+                              text="Join a Conga",
+                              next_menu=self.in_conga,
+                              action=Action.JOIN_CONGA)
+        create_conga = MenuItem(trigger="C",
+                                text="Create a Conga",
+                                next_menu=self.in_conga,
+                                action=Action.CREATE_CONGA)
+        leave_conga = MenuItem(trigger="L",
+                               text="Leave the Conga",
+                               next_menu=self.main_menu,
+                               action=Action.LEAVE_CONGA)
+        self.global_menu.menu_items = [matrix, exit_menu]
+        self.start_menu.menu_items = [about, connect]
+        self.main_menu.menu_items = [join_conga, create_conga, disconnect]
+        self.in_conga.menu_items = [leave_conga]
+
+        # Internal state for the CLI.
         (self._rows, self._cols) = (0, 0)
         self._event_win = None
         self._input_win = None
         self._main_win = None
         self._event_queue = multiprocessing.Queue()
         self._action_queue = multiprocessing.Queue()
-        self._current_menu = start_menu
+        self._current_menu = self.start_menu
         
         return
         
@@ -356,59 +417,91 @@ class Cli(object):
             return
         char = chr(input).upper()
         
-        # If the input is not available from the current menu (and isn't X, 
-        # which exits the menu), ignore it.
-        if char not in ([item.trigger for item in 
-            self._current_menu.menu_items] + ["X", "A"]):
+        # Create list of possible menu items.
+        current_menu = (self._current_menu.menu_items +
+                       self.global_menu.menu_items)
+
+        # If the input is not available from the current menu, ignore it.
+        if char not in ([item.trigger for item in current_menu]):
                 return
         
-        # If the user pressed "X", drop out of this menu (or the CLI).
-        if char == "X":
-            # Move to the parent menu of this one.  If there is no parent,
-            # exit the CLI.
-            if self._current_menu.parent is not None:
-                self._current_menu = self._current_menu.parent
-            else:
-                raise Cli.ExitCli
-        elif char == "A":
-            # Invoke the credit sequence.
-            credits(self._main_win)
-        else:
-            # The user must have pressed a key associated with one of the
-            # menu items.  Trigger the associated action.
-            selected_item = None
-            for item in self._current_menu.menu_items:
-                if char == item.trigger:
-                    selected_item = item
+        # The user must have pressed a key associated with one of the
+        # menu items.  Trigger the associated action.
+        selected_item = None
+        for item in current_menu:
+            if char == item.trigger:
+                selected_item = item
+        
+        if selected_item is None:
+            # Invalid input.  This should be impossible.  Assert.
+            raise AssertionError, "Input invalid for this menu."
             
-            if selected_item is None:
-                # Invalid input.  This should be impossible.  Assert.
-                raise AssertionError, "Input invalid for this menu."
-                
-            self._print_to_win("Processing command: " + selected_item.text,
-                               self._event_win,
-                               curses.color_pair(2))
+        self._print_to_win("Processing command: " + selected_item.get_text(),
+                           self._event_win,
+                           curses.color_pair(2))
 
-            if selected_item.action is not None:
+        if selected_item.action is not None:
+            if selected_item.action in Action.allowed_actions:
                 # Put the action on the queue.  No actions currently have
                 # associated parameters.
                 act = Action(selected_item.action, None)
                 self._action_queue.put(act)
-                
-            # Move to the menu specified by the item.
+            else:
+                # Assume that it is a function.
+                selected_item.action()
+            
+        # Move to the menu specified by the item.
+        if isinstance(selected_item.next_menu, str):
+            if selected_item.next_menu == "PARENT":
+                self._current_menu = self._current_menu.parent
+            elif selected_item.next_menu == "SAME":
+                pass
+            else:
+                raise AssertionError(
+                    "Unsupported menu: {}".format(selected_item.next_menu))
+        else:
             self._current_menu = selected_item.next_menu
-                
+    
+        # Check for exit from program - i.e. exit from the top-menu, which
+        # has no parent.
+        if self._current_menu is None:
+            raise Cli.ExitCli
+
         return
     
     
+    def _exit_text(self):
+        """
+        Display dynamic message for X option on menu.
+        """
+        if self._current_menu == self.start_menu:
+            return "Exit Pi Conga"
+        else:
+            return "Return to previous menu"
+
+
+    def _credits(self):
+        """
+        Invoke the credits.
+        """
+        credits(self._main_win)
+
+
+    def _matrix(self):
+        """
+        Invoke the credits.
+        """
+        matrix(self._main_win)
+
+
     def _display_menu(self):
         """
         Print out the current menu in the input window.
         """               
-        menu = self._current_menu
         
         # Check that this menu is going to work.
-        menu.verify()
+        menu = self._current_menu
+        menu.verify(self.global_menu)
         
         # Clear the window - we don't want bits of the previous menu hanging
         # around.
@@ -421,27 +514,22 @@ class Cli(object):
         self._input_win.addstr(1, 1, menu.name)
         
         # Print each of the menu items in turn.
+        menu_items = menu.menu_items + self.global_menu.menu_items
         line = 3  # Name is on line 1, line 2 is blank
-        for item in menu.menu_items:
-            self._input_win.addstr(line,
-                                   1,
-                                   "%s  %s" % (item.trigger, item.text))
-            line += 1
+        for item in menu_items:
+            # Don't display hidden items
+            if not item.hidden:
+                self._input_win.addstr(
+                    line, 1, "%s  %s" % (item.trigger, item.get_text()))
+                line += 1
             
-        # Print the "back" option ("exit" if we're in the top-level menu).
-        if menu is start_menu:
-            back_text = "Exit PiConga"
-        else:
-            back_text = "Back to the previous menu"
-        self._input_win.addstr(line, 1, "X  " + back_text)
-        
         # Print the input summary at the bottom of the input window.
         (height, width) = self._input_win.getmaxyx()
-        avail_triggers = [item.trigger for item in menu.menu_items]
+        avail_triggers = [item.trigger for item in menu_items if not item.hidden]
         triggers_txt_list = ", ".join(avail_triggers)
         self._input_win.addstr(height-1,
                                1,
-                               "Press %s or X." % triggers_txt_list)
+                               "Press one of: %s." % triggers_txt_list)
         
         return
         
@@ -487,6 +575,9 @@ class Cli(object):
             # Redraw both the windows.
             self._event_win.refresh()
             self._input_win.refresh()
+
+            # Sleep!
+            sleep(0.1)
             
         return None
         
@@ -567,38 +658,6 @@ class Cli(object):
         return action
  
  
-# Define the CLI.  We do this at global scope so that the CLI can access it
-# easily, and so that we can easily swap it out or modify it.
-start_menu = Menu("Start Menu")
-main_menu = Menu("Main Menu")
-main_menu.parent = start_menu
-in_conga = Menu("In-Conga actions")
-in_conga.parent = main_menu
-connect = MenuItem(trigger="C",
-                   text="Connect",
-                   next_menu=main_menu,
-                   action=Action.CONNECT)
-disconnect = MenuItem(trigger="D",
-                      text="Disconnect",
-                      next_menu=start_menu,
-                      action=Action.DISCONNECT)
-join_conga = MenuItem(trigger="J",
-                      text="Join a Conga",
-                      next_menu=in_conga,
-                      action=Action.JOIN_CONGA)
-create_conga = MenuItem(trigger="C",
-                        text="Create a Conga",
-                        next_menu=in_conga,
-                        action=Action.CREATE_CONGA)
-leave_conga = MenuItem(trigger="L",
-                       text="Leave the Conga",
-                       next_menu=main_menu,
-                       action=Action.LEAVE_CONGA)
-start_menu.menu_items = [connect]
-main_menu.menu_items = [join_conga, create_conga, disconnect]
-in_conga.menu_items = [leave_conga]
-        
-        
 if __name__ == "__main__":
     # Test routine.  Create a CLI and throw some events at it.
     test_cli = Cli()

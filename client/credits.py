@@ -391,6 +391,9 @@ How many hidden features can you find?
 
 
 def credits(win):
+    """
+    Pi Conga credits!
+    """
 
     # Speed for the scrolling credits
     SCROLL_RATE = 5
@@ -415,7 +418,7 @@ def credits(win):
         # Create the basic credits to scroll.
         FRAMES = screen.create_credits() * SCROLL_RATE
 
-        # Rutn throggh the whole lot for one loop.
+        # Run through the whole lot for one loop.
         for frame in range(FRAMES):
             for effect in effects:
                 effect.update(frame)
@@ -428,5 +431,29 @@ def credits(win):
             elif c in (ord("X"), ord("x")):
                 return
             curses.napms(50)
-        if effects is normal:
+
+
+def matrix(win):
+    """
+    Hidden extra - watch the matrix!
+    """
+    # Speed for the scrolling credits
+    SCROLL_RATE = 5
+
+    # Create our basic screen and then prepare the special effects.
+    screen = Screen(win)
+
+    effects = []
+    effects.append(Matrix(screen))
+
+    # Run the scene.
+    frame = 0
+    while True:
+        frame += 1
+        for effect in effects:
+            effect.update(frame)
+        screen.refresh()
+        c = screen.getch()
+        if c in (ord("X"), ord("x")):
             return
+        curses.napms(50)

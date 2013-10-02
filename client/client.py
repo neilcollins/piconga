@@ -21,7 +21,7 @@ class Client(object):
     # Class constants.
     base_url = "http://localhost:8000/conga"
     tornado_server_ip = "127.0.0.1"
-    tornado_server_port = 8001
+    tornado_server_port = 8888
     
     def __init__(self, username, password):
         """Constructor.  Create the three subcomponents."""
@@ -59,7 +59,7 @@ class Client(object):
         # Run until the CLI terminates dispatching events.
         while True:
             try:
-                recvd_action = actions.get(block=False)
+                recvd_action = actions.get(block=True)
                 if recvd_action.type == cli.Action.CREATE_CONGA:
                     # Create an existing conga
                     self._userid = self._django_sr.create_conga(
