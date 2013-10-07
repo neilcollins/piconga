@@ -22,9 +22,23 @@ To this end, we are using Tornado to build a very simple TCP proxy.
 from tornado.tcpserver import TCPServer
 from tornado.ioloop import IOLoop
 import tornado.options
+from tornado.options import options
 import signal
 from participant import Participant
-from db import Database
+from db import SqliteDatabase, PostgresDatabase
+
+
+# We need to define our command line options.
+tornado.options.define("pgname", default="",
+                       help="The name of the Postgres database.")
+tornado.options.define("pguser", default="",
+                       help="The username for the Postgres database.")
+tornado.options.define("pgpass", default="",
+                       help="The password for the Postgres database.")
+tornado.options.define("pghost", default="",
+                       help="The host for the Postgres database.")
+tornado.options.define("pgport", default="",
+                       help="The port for the Postgres database.")
 
 
 def handle_signal(sig, frame):
@@ -43,11 +57,15 @@ class TCPProxy(TCPServer):
     last_connection = None
     db = None
 
-    def __init__(self, db_path, *args, **kwargs):
+    def __init__(self, use_pg, db_path='', db_kwargs={}, *args, **kwargs):
         super(TCPProxy, self).__init__(*args, **kwargs)
 
-        self.db = Database()
-        self.db.connect(db_path)
+        if use_pg:
+            self.db = PostgresDatabase()
+            self.db.connect(**db_kwargs)
+        else:
+            self.db = SqliteDatabase()
+            self.db.connect(db_path)
 
     def handle_stream(self, stream, address):
         """
@@ -72,7 +90,18 @@ if __name__ == '__main__':
 
     tornado.options.parse_command_line()
 
-    proxy = TCPProxy('server/piconga.db')
+    # Work out whether we're going to use a Postgres DB or the Sqlite one.
+    opts = {'db_name': options.pgname, 'user': options.pguser,
+            'password': options.pgpass, 'host': options.pghost,
+            'port': options.pgport}
+
+    use_pg = any(opts.values())
+
+    if use_pg:
+        # Fixup the keyword arguments dictionary.
+        opts = {key: val for (key, val) in opts.items() if val}
+
+    proxy = TCPProxy(use_pg, db_path='server/piconga.db', db_kwargs=opts)
     proxy.listen(8888)
     IOLoop.instance().start()
 
