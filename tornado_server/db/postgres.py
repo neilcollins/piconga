@@ -1,42 +1,39 @@
 # -*- coding: utf-8 -*-
 """
-tornado_server.db.sqlite
-~~~~~~~~~~~~~~~~~~~~~~~~
+tornado_server.db.postgres
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This file implements the Sqlite portion of the database abstraction.
+This file implements the PostgreSQL portion of the database abstraction.
 """
-import sqlite3
+import psycopg2
 
 
 class Database(object):
     """
-    Defines an abstraction around the Sqlite3 database.
+    Defines an abstraction around a PostgreSQL database.
     """
     def __init__(self):
         self.conn = None
 
-    def connect(self, db_path, **kwargs):
+    def connect(self, db_name, **kwargs):
         """
-        Connect to the Sqlite3 database. Returns a database connection object.
+        Connect to the PostgreSQL database. Requires the database name.
+        Optionally takes any/all of the following keyword arguments: user,
+        password, host, port.
 
-        :param db_path: The path to the database.
+        :param db_name: The name of the PostgreSQL database.
         """
-        self.conn = sqlite3.connect(db_path)
+        self.conn = psycopg2.connect(database=db_name, **kwargs)
 
     def get(self, query, parameters=()):
         """
-        Execute a query that will return data against the Sqlite3 database.
+        Executes a query that will return data against the PostgreSQL database.
         Returns the operation result as provided by the cursor.
 
         :param query: The query in the form of a Python format string.
         :param parameters: The parameters to add to the query. DO NOT ADD THEM
                            YOURSELF YOU WILL GET IT WRONG.
         """
-        # Munge the string, removing the %s characters and adding the ?
-        # instead. There is a bug here if we ever need literal % chars: let's
-        # just never need them, eh?
-        query = query.replace("%s", "?")
-
         cursor = self.conn.cursor()
         cursor.execute(query, parameters)
 
@@ -44,18 +41,13 @@ class Database(object):
 
     def execute(self, query, parameters):
         """
-        Executes a query that will not return data against the Sqlite3
+        Executes a query that will not return data against the PostgreSQL
         database. Returns nothing.
 
         :param query: The query in the form of a Python format string.
         :param parameters: The parameters to add to the query. DO NOT ADD THEM
                            YOURSELF YOU WILL GET IT WRONG.
         """
-        # Munge the string, removing the %s characters and adding the ?
-        # instead. There is a bug here if we ever need literal % chars: let's
-        # just never need them, eh?
-        query = query.replace("%s", "?")
-
         cursor = self.conn.cursor()
         cursor.execute(query, parameters)
 
