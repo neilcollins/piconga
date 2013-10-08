@@ -5,7 +5,7 @@ class CongaUser(models.Model):
     """Represents a single user in the system"""
     user = models.OneToOneField(User)
     mac = models.CharField(max_length=20)
-    host = models.CharField(max_length=20)
+    host = models.CharField(max_length=100)
 
     def __unicode__(self):
         return self.user.__unicode__()
