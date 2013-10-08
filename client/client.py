@@ -19,8 +19,8 @@ class Client(object):
     """PiConga Client."""
     
     # Class constants.
-    base_url = "http://localhost:8000/conga"
-    tornado_server_ip = "127.0.0.1"
+    base_url = "http://ec2-54-229-169-49.eu-west-1.compute.amazonaws.com/conga"
+    tornado_server_ip = "ec2-54-229-169-49.eu-west-1.compute.amazonaws.com"
     tornado_server_port = 8888
     
     def __init__(self, username, password):
