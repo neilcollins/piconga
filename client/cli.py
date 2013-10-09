@@ -282,10 +282,14 @@ class Cli(object):
                                text="Leave the Conga",
                                next_menu=self.main_menu,
                                action=Action.LEAVE_CONGA)
+	send_ping = MenuItem(trigger="P",
+			     text="Send a ping over the Conga",
+			     next_menu="SAME",
+			     action=Action.SEND_MSG)
         self.global_menu.menu_items = [matrix, exit_menu]
         self.start_menu.menu_items = [about, connect]
         self.main_menu.menu_items = [join_conga, create_conga, disconnect]
-        self.in_conga.menu_items = [leave_conga]
+        self.in_conga.menu_items = [send_ping, leave_conga]
 
         # Internal state for the CLI.
         (self._rows, self._cols) = (0, 0)

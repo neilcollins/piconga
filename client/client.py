@@ -6,6 +6,7 @@
    """
    
 # Python imports
+import getpass
 import multiprocessing
 import Queue
 import sys
@@ -20,7 +21,9 @@ class Client(object):
     
     # Class constants.
     base_url = "http://ec2-54-229-169-49.eu-west-1.compute.amazonaws.com/conga"
+    #base_url = "http://localhost:8000/conga"
     tornado_server_ip = "ec2-54-229-169-49.eu-west-1.compute.amazonaws.com"
+    #tornado_server_ip = "localhost"
     tornado_server_port = 8888
     
     def __init__(self, username, password):
@@ -91,6 +94,11 @@ class Client(object):
                         self._username, self._password)
                     events.put(cli.Event(cli.Event.TEXT,
                         "Disconnected from  %s" % self.base_url))
+		elif recvd_action.type == cli.Action.SEND_MSG:
+		    # Send a ping along the Conga.
+		    self._tornado_sr.send_msg("Ping!")
+		    events.put(cli.Event(cli.Event.TEXT,
+                        "Sent a ping along the Conga."))
                 elif recvd_action.type == cli.Action.QUIT:
                     try:
                         cli_proc.join()
@@ -109,6 +117,14 @@ class Client(object):
 
 
 if __name__ == "__main__":
+    # Prompt the user for some basic information.
+    print "Welcome to PiConga!\n"
+    print "Please enter your name."
+    username = raw_input("Username: ")
+    print "Now please enter your password."
+    password = getpass.getpass("Password: ")
+    
     # Start up the client.
-    client = Client("<YOUR_NAME>", "<YOUR_PASSWORD>")
+    print "Starting PiConga client..."
+    client = Client(username, password)
     client.main_loop()
