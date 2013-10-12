@@ -101,7 +101,8 @@ class Client(object):
                         "Sent a ping along the Conga."))
                 elif recvd_action.type == cli.Action.QUIT:
                     try:
-                        cli_proc.join()
+                        cli_proc.terminate()
+                        tornado_proc.terminate()
                     except Cli.ExitCli:
                         pass
                     finally:
