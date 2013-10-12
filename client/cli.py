@@ -8,6 +8,7 @@
 
 # Python imports
 import curses
+import logging
 import subprocess
 import multiprocessing
 import Queue
@@ -15,6 +16,9 @@ from time import sleep
 
 # PiConga imports
 from credits import credits, matrix
+
+# Set up logging for this module. Child of the core client logger.
+logger = logging.getLogger("piconga.cli")
 
 # Menu definitions.
 class Menu(object):
@@ -282,10 +286,10 @@ class Cli(object):
                                text="Leave the Conga",
                                next_menu=self.main_menu,
                                action=Action.LEAVE_CONGA)
-	send_ping = MenuItem(trigger="P",
-			     text="Send a ping over the Conga",
-			     next_menu="SAME",
-			     action=Action.SEND_MSG)
+        send_ping = MenuItem(trigger="P",
+                             text="Send a ping over the Conga",
+                             next_menu="SAME",
+                             action=Action.SEND_MSG)
         self.global_menu.menu_items = [matrix, exit_menu]
         self.start_menu.menu_items = [about, connect]
         self.main_menu.menu_items = [join_conga, create_conga, disconnect]
@@ -567,7 +571,9 @@ class Cli(object):
 
             # Get user input and process it, if there is any.
             input = self._input_win.getch()
+        
             if input != -1:
+                logger.debug("Got user input %c", input)
                 try:
                     self._process_input(input)            
                 except Cli.ExitCli:

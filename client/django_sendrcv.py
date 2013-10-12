@@ -6,11 +6,15 @@
    
 # Python imports
 import json
+import logging
 import requests
 from uuid import getnode
 
 # External library imports
 import requests
+
+# Set up logging for this module. Child of the core client logger.
+logger = logging.getLogger("piconga.django")
 
 class ServerError(Exception):
     """Exception raised when the server returns an error."""
@@ -46,6 +50,7 @@ class DjangoSendRcv(object):
         """Register a user with the Django server.  Returns the user's
         User ID for joining Congas."""
         
+        logger.debug("Registering user %s", username)
         mac = ':'.join('%02X' %
                      ((getnode() >> 8*i) & 0xff) for i in reversed(xrange(6)))
         payload = {'username': username,
@@ -72,6 +77,7 @@ class DjangoSendRcv(object):
         before re-adding it, but it's a nicely symmetrical API.
         """
         
+        logger.debug("Unregistering user %s", username)
         payload = {'username': username, 'password': password}
         headers = {'content-type': 'application/json'}
         r = self._session.delete(self._base_url + '/user/',
@@ -90,6 +96,7 @@ class DjangoSendRcv(object):
         user's credentials, but those of the Conga to create.
         """
         
+        logger.debug("Creating Conga %s", name)
         payload = {'name': name, 'password': password}
         headers = {'content-type': 'application/json'}
         r = self._session.post(self._base_url + '/conga/',
@@ -108,6 +115,7 @@ class DjangoSendRcv(object):
         when it was created and not those of the user trying to join the conga.
         """
         
+        logger.debug("Joining Conga %s", name)
         payload = {'name': name, 'password': password}
         headers = {'content-type': 'application/json'}
         r = self._session.put(self._base_url + '/conga/',
@@ -126,6 +134,7 @@ class DjangoSendRcv(object):
         of the Conga, but the password is the user's password.
         """
         
+        logger.debug("Leaving Conga %s", name)
         headers = {'content-type': 'application/json'}
         r = self._session.delete(self._base_url + '/conga/'+name,
                            headers=headers)

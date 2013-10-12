@@ -6,8 +6,12 @@
    """
    
 # Python imports
+import logging
 import socket
 import multiprocessing
+
+# Set up logging. Child of the core client logger.
+logger = logging.getLogger("piconga.tornado")
 
 class SendError(socket.error):
     """
@@ -57,6 +61,7 @@ class TornadoSendRcv(object):
             # ten seconds to receive a message.
             try:
                 data = self._sock.recv(4096)
+                logger.debug("Received message: %s", data)
                 
                 # Put this data onto the receive queue.
                 self._recv_queue.put(data)
@@ -139,6 +144,8 @@ class TornadoSendRcv(object):
         receive loop.
         """
         
+        logger.debug("Starting Tornado send/recv")
+    
         # Store off the server IP and port.
         self._server_ip = server_ip
         self._server_port = server_port
@@ -177,6 +184,8 @@ class TornadoSendRcv(object):
         Get a message from the receive queue, if one exists.
         """
         
+        logger.debug("Getting a message from the receive queue")
+    
         # Check for a valid socket.  We can't return any messages if one does
         # not exist, so return nothing.
         if self._sock is None:
@@ -185,6 +194,7 @@ class TornadoSendRcv(object):
         # Pull a message off the queue, if one exists.
         try:
             msg = self._recv_queue.get()
+            logger.debug("Received message: %s", msg)
         except multiprocessing.Queue.Empty:
             # No messages to return, return None.
             return None
@@ -200,10 +210,11 @@ class TornadoSendRcv(object):
         Send a message to the Tornado server.  This function assumes that
         you have already created the message, ready to send.
         """
-        
+    
         assert self._sock is not None
         
         try:
+            logger.debug("Sending message: %s", data)
             bytes_sent = self._sock.send(msg)
         except socket.error as e:
             send_error = SendError()
@@ -264,6 +275,7 @@ class TornadoSendRcv(object):
         send_bye.
         """
         
+        logger.debug("Closing Tornado server")
         self._sock.shutdown(socket.SHUT_RDWR)
         self._sock.close()
         self._sock = None
