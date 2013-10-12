@@ -6,9 +6,13 @@
    """
    
 # Python imports
+import logging
 import socket
 import multiprocessing
 import Queue
+
+# Set up logging. Child of the core client logger.
+logger = logging.getLogger("piconga.tornado")
 
 class SendError(socket.error):
     """
@@ -60,6 +64,7 @@ class TornadoSendRcv(object):
             # Try to receive a message from the socket.
             try:
                 data = self._sock.recv(4096)
+                logger.debug("Received message: %s", data)
                 
                 # Parse the message as a Conga protocol message.
                 conga_msg = self._parse_conga_msg(data)
@@ -156,6 +161,8 @@ class TornadoSendRcv(object):
         receive loop.
         """
         
+        logger.debug("Starting Tornado send/recv")
+    
         # Create the socket to connect to the server.  This is a standard IPv4
         # TCP socket.
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -184,6 +191,32 @@ class TornadoSendRcv(object):
                 self.close_connection()
             
         return
+        
+        
+    def get_message(self):
+        """
+        Get a message from the receive queue, if one exists.
+        """
+        
+        logger.debug("Getting a message from the receive queue")
+    
+        # Check for a valid socket.  We can't return any messages if one does
+        # not exist, so return nothing.
+        if self._sock is None:
+            return None
+            
+        # Pull a message off the queue, if one exists.
+        try:
+            msg = self._recv_queue.get()
+            logger.debug("Received message: %s", msg)
+        except multiprocessing.Queue.Empty:
+            # No messages to return, return None.
+            return None
+            
+        # Parse the message as a Conga protocol message.
+        conga_msg = self._parse_conga_msg(msg)
+            
+        return conga_msg
                 
     
     def send_conga_message(self, msg):
@@ -191,10 +224,11 @@ class TornadoSendRcv(object):
         Send a message to the Tornado server.  This function assumes that
         you have already created the message, ready to send.
         """
-        
+    
         assert self._sock is not None
         
         try:
+            logger.debug("Sending message: %s", data)
             bytes_sent = self._sock.send(msg)
         except socket.error as e:
             send_error = SendError()
@@ -255,6 +289,7 @@ class TornadoSendRcv(object):
         send_bye.
         """
         
+        logger.debug("Closing Tornado server")
         self._sock.shutdown(socket.SHUT_RDWR)
         self._sock.close()
         self._sock = None

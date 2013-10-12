@@ -7,6 +7,7 @@
    
 # Python imports
 import getpass
+import logging
 import multiprocessing
 import Queue
 import sys
@@ -16,6 +17,14 @@ import time
 import cli
 import django_sendrcv
 import tornado_sendrcv
+
+# Set up a logging object for this module and make it log to a file.
+logger = logging.getLogger("piconga")
+logger.setLevel(logging.DEBUG)
+handler = logging.FileHandler("piconga.log", mode="w")
+formatter = logging.Formatter(fmt="%(asctime)s %(name)-20s %(message)s")
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 class Client(object):
     """PiConga Client."""
@@ -67,6 +76,7 @@ class Client(object):
         while True:
             try:
                 recvd_action = actions.get(block=False)
+                logger.debug("Saw action type %d", recvd_action.type)
                 if recvd_action.type == cli.Action.CREATE_CONGA:
                     # Create an existing conga
                     self._userid = self._django_sr.create_conga(
@@ -104,11 +114,12 @@ class Client(object):
 		    events.put(cli.Event(cli.Event.TEXT,
                         "Sent a ping along the Conga."))
                 elif recvd_action.type == cli.Action.QUIT:
+                    logger.debug("CLI told us to quit")
                     try:
                         cli_proc.terminate()
                         tornado_proc.terminate()
                     except Cli.ExitCli:
-                        pass
+                        logger.debug("Saw CLI exit exception")
                     finally:
                         sys.exit()
                 else:
@@ -116,7 +127,7 @@ class Client(object):
                         "Unknown action %d" % recvd_action.type))
             except django_sendrcv.ServerError, e:
                 events.put(cli.Event(cli.Event.TEXT,
-                    str(e)))
+                     str(e)))
             except Queue.Empty:
                 pass
 
@@ -133,6 +144,10 @@ class Client(object):
 
 
 if __name__ == "__main__":
+    # Redirect stderr - we want errors to appear in their own file.
+    errorlog = open("errors.log", "w")
+    sys.stderr = errorlog    
+
     # Prompt the user for some basic information.
     print "Welcome to PiConga!\n"
     print "Please enter your name."
