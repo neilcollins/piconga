@@ -8,6 +8,7 @@
 # Python imports
 import socket
 import multiprocessing
+import Queue
 
 class SendError(socket.error):
     """
@@ -33,15 +34,18 @@ class TornadoSendRcv(object):
     
     # Private functions
     
-    def __init__(self):
+    def __init__(self, server_ip, server_port):
         """
         Constructor.  Store off the server IP and port.
         """
  
+        # Store off the server IP and port.
+        self._server_ip = server_ip
+        self._server_port = server_port
+
         # Create initial versions of all other internal class variables.
-        self._server_ip = None
-        self._server_port = None
         self._sock = None
+        self._send_queue = None
         self._recv_queue = None
         
         return
@@ -53,13 +57,16 @@ class TornadoSendRcv(object):
         """
         
         while self._sock is not None:
-            # Try to receive a message from the socket.  We will wait for up to
-            # ten seconds to receive a message.
+            # Try to receive a message from the socket.
             try:
                 data = self._sock.recv(4096)
                 
+                # Parse the message as a Conga protocol message.
+                conga_msg = self._parse_conga_msg(data)
+
                 # Put this data onto the receive queue.
-                self._recv_queue.put(data)
+                if conga_msg is not None:
+                    self._recv_queue.put(conga_msg)
             except socket.timeout:
                 # It's fine for the socket to timeout, we just don't want it
                 # sitting there forever.  Go round again.
@@ -71,6 +78,16 @@ class TornadoSendRcv(object):
                 recv_error.value = e.value
                 raise recv_error
         
+            # Now try to send any messages.
+            try:
+                msg = self._send_queue.get(block=False)
+                self.send_msg(msg)
+            except socket.timeout:
+                # It's fine for the socket to timeout, we just don't want it
+                # sitting there forever.  Go round again.
+                pass
+            except Queue.Empty:
+                pass
         return
 
 
@@ -133,15 +150,11 @@ class TornadoSendRcv(object):
         
     # Public functions
     
-    def run(self, server_ip, server_port):
+    def run(self, recv_q, send_q):
         """
         Connect to the server, set up the output queue, and kick off the
         receive loop.
         """
-        
-        # Store off the server IP and port.
-        self._server_ip = server_ip
-        self._server_port = server_port
         
         # Create the socket to connect to the server.  This is a standard IPv4
         # TCP socket.
@@ -152,10 +165,11 @@ class TornadoSendRcv(object):
         
         # This socket should block with a ten-second timeout.
         self._sock.setblocking(1)
-        self._sock.settimeout(10)
+        self._sock.settimeout(0.1)
         
         # Create a queue to hold received messages.
-        self._recv_queue = multiprocessing.Queue()
+        self._send_queue = send_q
+        self._recv_queue = recv_q
         
         # Spin the event loop.
         try:
@@ -170,29 +184,6 @@ class TornadoSendRcv(object):
                 self.close_connection()
             
         return
-        
-        
-    def get_message(self):
-        """
-        Get a message from the receive queue, if one exists.
-        """
-        
-        # Check for a valid socket.  We can't return any messages if one does
-        # not exist, so return nothing.
-        if self._sock is None:
-            return None
-            
-        # Pull a message off the queue, if one exists.
-        try:
-            msg = self._recv_queue.get()
-        except multiprocessing.Queue.Empty:
-            # No messages to return, return None.
-            return None
-            
-        # Parse the message as a Conga protocol message.
-        conga_msg = self._parse_conga_msg(msg)
-            
-        return conga_msg
                 
     
     def send_conga_message(self, msg):

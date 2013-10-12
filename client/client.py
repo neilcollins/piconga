@@ -10,6 +10,7 @@ import getpass
 import multiprocessing
 import Queue
 import sys
+import time
 
 # PiConga imports
 import cli
@@ -31,7 +32,8 @@ class Client(object):
         
         self._cli = cli.Cli()
         self._django_sr = django_sendrcv.DjangoSendRcv(self.base_url)
-        self._tornado_sr = tornado_sendrcv.TornadoSendRcv()
+        self._tornado_sr = tornado_sendrcv.TornadoSendRcv(
+            self.tornado_server_ip, self.tornado_server_port)
         
         # Store off the username and password.
         self._username = username
@@ -47,6 +49,8 @@ class Client(object):
         # Create the queues for any comms.
         actions = multiprocessing.Queue()
         events = multiprocessing.Queue()
+        in_msgs = multiprocessing.Queue()
+        out_msgs = multiprocessing.Queue()
                                                      
         # Start the CLI in its own process.
         cli_proc = multiprocessing.Process(
@@ -54,15 +58,15 @@ class Client(object):
         cli_proc.start()
         
         # Start up the Tornado loop in its own process.
-        tornado_proc = multiprocessing.Process(target=self._tornado_sr.run,
-                                               args=(self.tornado_server_ip,
-                                                     self.tornado_server_port))
+        tornado_proc = multiprocessing.Process(
+            target=self._tornado_sr.run, args=(in_msgs, out_msgs))
         tornado_proc.start()
         
+
         # Run until the CLI terminates dispatching events.
         while True:
             try:
-                recvd_action = actions.get(block=True)
+                recvd_action = actions.get(block=False)
                 if recvd_action.type == cli.Action.CREATE_CONGA:
                     # Create an existing conga
                     self._userid = self._django_sr.create_conga(
@@ -96,7 +100,7 @@ class Client(object):
                         "Disconnected from  %s" % self.base_url))
 		elif recvd_action.type == cli.Action.SEND_MSG:
 		    # Send a ping along the Conga.
-		    self._tornado_sr.send_msg("Ping!")
+		    out_msgs.put("Ping!")
 		    events.put(cli.Event(cli.Event.TEXT,
                         "Sent a ping along the Conga."))
                 elif recvd_action.type == cli.Action.QUIT:
@@ -115,6 +119,17 @@ class Client(object):
                     str(e)))
             except Queue.Empty:
                 pass
+
+            try:
+                # Check for any new messages.
+                recvd_msg = in_msgs.get(block=False)
+                if recvd_msg is not None:
+                    events.pit(
+                        cli.Event(cli.Event.TEXT, recvd_msg))
+            except Queue.Empty:
+                pass
+
+            time.sleep(0.1)
 
 
 if __name__ == "__main__":
