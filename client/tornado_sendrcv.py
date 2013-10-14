@@ -55,9 +55,9 @@ class TornadoSendRcv(object):
         return
         
     
-    def _recv_loop(self):
+    def _sendrecv_loop(self):
         """
-        Get messages from the server.
+        Get messages from and send messages to the server.
         """
         
         while self._sock is not None:
@@ -74,7 +74,7 @@ class TornadoSendRcv(object):
                     self._recv_queue.put(conga_msg)
             except socket.timeout:
                 # It's fine for the socket to timeout, we just don't want it
-                # sitting there forever.  Go round again.
+                # sitting there forever.
                 pass
             except socket.error as e:
                 # There was a problem with receiving the data.  Raise a
@@ -83,14 +83,16 @@ class TornadoSendRcv(object):
                 recv_error.value = e.value
                 raise recv_error
         
-            # Now try to send any messages.
+            # Now try to send any messages.  We send all of them in one go so
+            # that we're not slowed down by having to timeout on receiving
+            # each time.
             try:
-                msg = self._send_queue.get(block=False)
-                self.send_msg(msg)
-            except socket.timeout:
-                # It's fine for the socket to timeout, we just don't want it
-                # sitting there forever.  Go round again.
-                pass
+                while True:
+                    # Note that this will not loop forever because eventually
+                    # the queue will be empty, dropping us into the except:
+                    # branch.
+                    msg = self._send_queue.get(block=False)
+                    self._send_conga_message(msg)
             except Queue.Empty:
                 pass
         return
@@ -102,6 +104,10 @@ class TornadoSendRcv(object):
         containing the message's verb, a dictionary of its headers, and its
         body.
         """
+        
+        # A zero-length message can't be decoded, so return None.
+        if len(msg) == 0:
+            return None
         
         message = msg.decode("utf_8")
         lines = message.split("\r\n")
@@ -132,33 +138,51 @@ class TornadoSendRcv(object):
         return (verb, headers, body)
         
         
-    def _create_conga_msg(self, verb, headers, body=""):
+    def _send_conga_message(self, msg):
         """
-        Create a Conga-protocol message, ready to send over the wire.
-        Parameters are as follows:
-        verb    - HELLO, MSG or BYE
-        headers - Dictionary of headers to send.  Keys are the names of the 
-                  headers to send, values are the values of those headers.
-                  The Content-Length header should not be included.
-        body    - Body of the message to send (optional).
+        Send a message to the Tornado server.  This function assumes that
+        you have already created the message, ready to send.
+        """
+
+        assert self._sock is not None
+        
+        try:
+            logger.debug("Sending message: %s", msg)
+            bytes_sent = self._sock.send(msg)
+        except socket.error as e:
+            send_error = SendError()
+            send_error.value = e.value
+            raise send_error
+        
+        assert bytes_sent == len(msg)
+        
+        if msg.startswith("BYE"):
+            # We have just closed the server-side connection.  Shut it down
+            # from this side too.
+            self._close_connection()
+        
+        return   
+
+
+    def _close_connection(self):
+        """
+        Close the connection to the Tornado server.
         """
         
-        message = "%s\r\n" % verb
-        for name in headers.keys():
-            message += "%s: %s\r\n" % (name, headers[name])
-        message += "Content-Length: %d\r\n" % len(body)
-        message += "\r\n"
-        message += body
+        logger.debug("Closing Tornado server")
+        self._sock.shutdown(socket.SHUT_RDWR)
+        self._sock.close()
+        self._sock = None
         
-        return message.encode("utf_8")
+        return  
         
         
     # Public functions
     
     def run(self, recv_q, send_q):
         """
-        Connect to the server, set up the output queue, and kick off the
-        receive loop.
+        Connect to the server, set up the input/output queues, and kick
+        off the send/receive loop.
         """
         
         logger.debug("Starting Tornado send/recv")
@@ -170,17 +194,18 @@ class TornadoSendRcv(object):
         # Connect the socket to the server.
         self._sock.connect((self._server_ip, self._server_port))
         
-        # This socket should block with a ten-second timeout.
+        # This socket should block with a 100ms timeout, as both sending and
+        # receiving will block on this.
         self._sock.setblocking(1)
         self._sock.settimeout(0.1)
         
-        # Create a queue to hold received messages.
+        # Assign the send and receive queues from the caller.
         self._send_queue = send_q
         self._recv_queue = recv_q
         
         # Spin the event loop.
         try:
-            self._recv_loop()
+            self._sendrecv_loop()
         except RecvError:
             if self._sock is None:
                 # Socket was closed by sending a BYE.  This is fine, no more
@@ -188,112 +213,87 @@ class TornadoSendRcv(object):
                 pass
             else:
                 # Something went badly wrong.  Shut down the socket.
-                self.close_connection()
+                self._close_connection()
             
         return
-        
-        
-    def get_message(self):
-        """
-        Get a message from the receive queue, if one exists.
-        """
-        
-        logger.debug("Getting a message from the receive queue")
     
-        # Check for a valid socket.  We can't return any messages if one does
-        # not exist, so return nothing.
-        if self._sock is None:
-            return None
-            
-        # Pull a message off the queue, if one exists.
-        try:
-            msg = self._recv_queue.get()
-            logger.debug("Received message: %s", msg)
-        except multiprocessing.Queue.Empty:
-            # No messages to return, return None.
-            return None
-            
-        # Parse the message as a Conga protocol message.
-        conga_msg = self._parse_conga_msg(msg)
-            
-        return conga_msg
                 
+# External functions.  These are designed to act on a TornadoSendRcv object
+# through its externally-visible queues.
+
+def get_message(recv_q):
+    """
+    Get a message from the receive queue, if one exists.
+    """
+        
+    # Pull a message off the queue, if one exists.
+    try:
+        msg = recv_q.get(block=False)
+        logger.debug("Received message: %s", msg)
+    except Queue.Empty:
+        # No messages to return, return None.
+        return None
+        
+    # Parse the message as a Conga protocol message.
+    conga_msg = TornadoSendRcv._parse_conga_msg(msg)
+        
+    return conga_msg
     
-    def send_conga_message(self, msg):
-        """
-        Send a message to the Tornado server.  This function assumes that
-        you have already created the message, ready to send.
-        """
     
-        assert self._sock is not None
+def create_conga_msg(verb, headers, body=""):
+    """
+    Create a Conga-protocol message, ready to send over the wire.
+    Parameters are as follows:
+    verb    - HELLO, MSG or BYE
+    headers - Dictionary of headers to send.  Keys are the names of the 
+              headers to send, values are the values of those headers.
+              The Content-Length header should not be included.
+    body    - Body of the message to send (optional).
+    """
+    
+    message = "%s\r\n" % verb
+    for name in headers.keys():
+        message += "%s: %s\r\n" % (name, headers[name])
+    message += "Content-Length: %d\r\n" % len(body)
+    message += "\r\n"
+    message += body
+    
+    return message.encode("utf_8")
+
         
-        try:
-            logger.debug("Sending message: %s", data)
-            bytes_sent = self._sock.send(msg)
-        except socket.error as e:
-            send_error = SendError()
-            send_error.value = e.value
-            raise send_error
-        
-        assert bytes_sent == len(msg)
-        
-        return
-        
-        
-    def send_hello(self, userid):
-        """
-        Send a HELLO message to the Tornado server.  Requires the user ID
-        of the Conga you wish to join.
-        """
-        
-        msg = self._create_conga_msg("HELLO",
-                                     {"User-ID": userid})
-                                     
-        self.send_conga_message(msg)
-        
-        return
-        
-        
-    def send_msg(self, data):
-        """
-        Send a MSG message to the Tornado server.  Requires the payload of 
-        the message you wish to send.
-        """
-        
-        msg = self._create_conga_msg("MSG", {}, data)
-        
-        self.send_conga_message(msg)
-        
-        return
-        
-        
-    def send_bye(self):
-        """
-        Send a BYE message to the Tornado server, then disconnect.
-        """
-        
-        msg = self._create_conga_msg("BYE", {})
-        
-        self.send_conga_message(msg)
-        
-        # Tidy up the connection.
-        self.close_connection()
-        
-        return
-        
-        
-    def close_connection(self):
-        """
-        Close the connection to the Tornado server.  This should only be
-        used externally in the case of errors - to exit cleanly, call
-        send_bye.
-        """
-        
-        logger.debug("Closing Tornado server")
-        self._sock.shutdown(socket.SHUT_RDWR)
-        self._sock.close()
-        self._sock = None
-        
-        return
-        
-        
+def send_hello(send_q, userid):
+    """
+    Send a HELLO message to the Tornado server.  Requires the user ID
+    of the Conga you wish to join.
+    """
+    
+    msg = create_conga_msg("HELLO", {"User-ID": userid})
+                                 
+    send_q.put(msg)
+    
+    return
+    
+    
+def send_msg(send_q, data):
+    """
+    Send a MSG message to the Tornado server.  Requires the payload of 
+    the message you wish to send.
+    """
+    
+    msg = create_conga_msg("MSG", {}, data)
+    
+    send_q.put(msg)
+    
+    return
+    
+    
+def send_bye(send_q):
+    """
+    Send a BYE message to the Tornado server, then disconnect.
+    """
+    
+    msg = create_conga_msg("BYE", {})
+    
+    send_q.put(msg)
+    
+    return

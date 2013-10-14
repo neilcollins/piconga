@@ -48,6 +48,9 @@ class Client(object):
         self._username = username
         self._password = password
         
+        # Initialise other variables.
+        self._userid = 0
+        
         return
         
         
@@ -69,8 +72,7 @@ class Client(object):
         # Start up the Tornado loop in its own process.
         tornado_proc = multiprocessing.Process(
             target=self._tornado_sr.run, args=(in_msgs, out_msgs))
-        tornado_proc.start()
-        
+        tornado_proc.start()        
 
         # Run until the CLI terminates dispatching events.
         while True:
@@ -87,12 +89,14 @@ class Client(object):
                     # Join an existing conga
                     self._userid = self._django_sr.join_conga(
                         "<CONGA>", "<PASSWORD")
+                    tornado_sendrcv.send_hello(out_msgs, self._userid)
                     events.put(cli.Event(cli.Event.TEXT,
                         "Joined conga"))
                 elif recvd_action.type == cli.Action.LEAVE_CONGA:
                     # Left a conga
-                    self._userid = self._django_sr.leave_conga(
-                        "<CONGA>", "<PASSWORD>")
+                    tornado_sendrcv.send_bye(out_msgs)
+                    self._django_sr.leave_conga("<CONGA>", "<PASSWORD>")
+                    self._userid = 0
                     events.put(cli.Event(cli.Event.TEXT,
                         "Left conga"))
                 elif recvd_action.type == cli.Action.CONNECT:
@@ -104,14 +108,15 @@ class Client(object):
                         (self._username, self._userid)))
                 elif recvd_action.type == cli.Action.DISCONNECT:
                     # Unregister the user with the Django server.
-                    self._userid = self._django_sr.unregister_user(
-                        self._username, self._password)
+                    self._django_sr.unregister_user(self._username,
+                                                    self._password)
+                    self._userid = 0
                     events.put(cli.Event(cli.Event.TEXT,
                         "Disconnected from  %s" % self.base_url))
-		elif recvd_action.type == cli.Action.SEND_MSG:
-		    # Send a ping along the Conga.
-		    out_msgs.put("Ping!")
-		    events.put(cli.Event(cli.Event.TEXT,
+                elif recvd_action.type == cli.Action.SEND_MSG:
+                    # Send a ping along the Conga.
+                    tornado_sendrcv.send_msg(out_msgs, "Ping!")
+                    events.put(cli.Event(cli.Event.TEXT,
                         "Sent a ping along the Conga."))
                 elif recvd_action.type == cli.Action.QUIT:
                     logger.debug("CLI told us to quit")
@@ -126,19 +131,15 @@ class Client(object):
                     events.put(cli.Event(cli.Event.TEXT,
                         "Unknown action %d" % recvd_action.type))
             except django_sendrcv.ServerError, e:
-                events.put(cli.Event(cli.Event.TEXT,
-                     str(e)))
+                events.put(cli.Event(cli.Event.TEXT, str(e)))
             except Queue.Empty:
                 pass
 
-            try:
-                # Check for any new messages.
-                recvd_msg = in_msgs.get(block=False)
-                if recvd_msg is not None:
-                    events.pit(
-                        cli.Event(cli.Event.TEXT, recvd_msg))
-            except Queue.Empty:
-                pass
+            # Check for any new messages.
+            recvd_msg = tornado_sendrcv.get_message(in_msgs)
+            if recvd_msg is not None:
+                (verb, headers, body) = recvd_msg
+                events.put(cli.Event(cli.Event.TEXT, body))
 
             time.sleep(0.1)
 
