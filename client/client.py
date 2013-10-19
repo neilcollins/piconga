@@ -89,12 +89,14 @@ class Client(object):
                     # Join an existing conga
                     self._userid = self._django_sr.join_conga(
                         "<CONGA>", "<PASSWORD")
+                    tornado_sendrcv.start_connection(out_msgs)
                     tornado_sendrcv.send_hello(out_msgs, self._userid)
                     events.put(cli.Event(cli.Event.TEXT,
                         "Joined conga"))
                 elif recvd_action.type == cli.Action.LEAVE_CONGA:
                     # Left a conga
                     tornado_sendrcv.send_bye(out_msgs)
+                    tornado_sendrcv.close_connection(out_msgs)
                     self._django_sr.leave_conga("<CONGA>", "<PASSWORD>")
                     self._userid = 0
                     events.put(cli.Event(cli.Event.TEXT,
@@ -138,8 +140,13 @@ class Client(object):
             # Check for any new messages.
             recvd_msg = tornado_sendrcv.get_message(in_msgs)
             if recvd_msg is not None:
-                (verb, headers, body) = recvd_msg
-                events.put(cli.Event(cli.Event.TEXT, body))
+                if recvd_msg.type == tornado_sendrcv.QueueMsg.SERVER_MSG:
+                    # New message from the Tornado server.
+                    (verb, headers, body) = recvd_msg
+                    events.put(cli.Event(cli.Event.TEXT, body))
+                elif recvd_msg.type == tornado_sendrcv.QueueMsg.LOST_CONN:
+                    # Lost connection to the Tornado server.
+                    events.put(cli.Event(cli.Event.LOST_CONN))
 
             time.sleep(0.1)
 
