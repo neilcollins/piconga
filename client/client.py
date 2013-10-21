@@ -18,22 +18,14 @@ import cli
 import django_sendrcv
 import tornado_sendrcv
 
-# Set up a logging object for this module and make it log to a file.
-logger = logging.getLogger("piconga")
-logger.setLevel(logging.DEBUG)
-handler = logging.FileHandler("piconga.log", mode="w")
-formatter = logging.Formatter(fmt="%(asctime)s %(name)-20s %(message)s")
-handler.setFormatter(formatter)
-logger.addHandler(handler)
-
 class Client(object):
     """PiConga Client."""
     
     # Class constants.
-    base_url = "http://ec2-54-229-169-49.eu-west-1.compute.amazonaws.com/conga"
-    #base_url = "http://localhost:8000/conga"
-    tornado_server_ip = "ec2-54-229-169-49.eu-west-1.compute.amazonaws.com"
-    #tornado_server_ip = "localhost"
+    #base_url = "http://ec2-54-229-169-49.eu-west-1.compute.amazonaws.com/conga"
+    base_url = "http://localhost:8000/conga"
+    #tornado_server_ip = "ec2-54-229-169-49.eu-west-1.compute.amazonaws.com"
+    tornado_server_ip = "localhost"
     tornado_server_port = 8888
     
     def __init__(self, username, password):
@@ -49,7 +41,7 @@ class Client(object):
         self._password = password
         
         # Initialise other variables.
-        self._userid = 0
+        self._userid = None
         
         return
         
@@ -81,13 +73,15 @@ class Client(object):
                 logger.debug("Saw action type %d", recvd_action.type)
                 if recvd_action.type == cli.Action.CREATE_CONGA:
                     # Create an existing conga
-                    self._userid = self._django_sr.create_conga(
+                    self._django_sr.create_conga(
                         "<CONGA>", "<PASSWORD")
+                    tornado_sendrcv.start_connection(out_msgs)
+                    tornado_sendrcv.send_hello(out_msgs, self._userid)
                     events.put(cli.Event(cli.Event.TEXT,
                         "Created conga"))
                 elif recvd_action.type == cli.Action.JOIN_CONGA:
                     # Join an existing conga
-                    self._userid = self._django_sr.join_conga(
+                    self._django_sr.join_conga(
                         "<CONGA>", "<PASSWORD")
                     tornado_sendrcv.start_connection(out_msgs)
                     tornado_sendrcv.send_hello(out_msgs, self._userid)
@@ -98,7 +92,6 @@ class Client(object):
                     tornado_sendrcv.send_bye(out_msgs)
                     tornado_sendrcv.close_connection(out_msgs)
                     self._django_sr.leave_conga("<CONGA>", "<PASSWORD>")
-                    self._userid = 0
                     events.put(cli.Event(cli.Event.TEXT,
                         "Left conga"))
                 elif recvd_action.type == cli.Action.CONNECT:
@@ -112,7 +105,7 @@ class Client(object):
                     # Unregister the user with the Django server.
                     self._django_sr.unregister_user(self._username,
                                                     self._password)
-                    self._userid = 0
+                    self._userid = None
                     events.put(cli.Event(cli.Event.TEXT,
                         "Disconnected from  %s" % self.base_url))
                 elif recvd_action.type == cli.Action.SEND_MSG:
@@ -140,11 +133,12 @@ class Client(object):
             # Check for any new messages.
             recvd_msg = tornado_sendrcv.get_message(in_msgs)
             if recvd_msg is not None:
-                if recvd_msg.type == tornado_sendrcv.QueueMsg.SERVER_MSG:
+                logger.debug("@@@PAB: %s" % str(recvd_msg))
+                if recvd_msg[0] == "MSG":
                     # New message from the Tornado server.
                     (verb, headers, body) = recvd_msg
                     events.put(cli.Event(cli.Event.TEXT, body))
-                elif recvd_msg.type == tornado_sendrcv.QueueMsg.LOST_CONN:
+                elif recvd_msg[0] == "BYE":
                     # Lost connection to the Tornado server.
                     events.put(cli.Event(cli.Event.LOST_CONN))
 
@@ -152,10 +146,6 @@ class Client(object):
 
 
 if __name__ == "__main__":
-    # Redirect stderr - we want errors to appear in their own file.
-    errorlog = open("errors.log", "w")
-    sys.stderr = errorlog    
-
     # Prompt the user for some basic information.
     print "Welcome to PiConga!\n"
     print "Please enter your name."
@@ -163,6 +153,18 @@ if __name__ == "__main__":
     print "Now please enter your password."
     password = getpass.getpass("Password: ")
     
+    # Set up a logging object for this module and make it log to a file.
+    logger = logging.getLogger("piconga")
+    logger.setLevel(logging.DEBUG)
+    handler = logging.FileHandler("piconga.%s.log" % username, mode="w")
+    formatter = logging.Formatter(fmt="%(asctime)s %(name)-20s %(message)s")
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
+    # Redirect stderr - we want errors to appear in their own file.
+    errorlog = open("errors.%s.log" % username, "w")
+    sys.stderr = errorlog    
+
     # Start up the client.
     print "Starting PiConga client..."
     client = Client(username, password)

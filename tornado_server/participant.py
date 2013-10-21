@@ -10,6 +10,7 @@ from conga import Conga, conga_from_id
 from tornado_exceptions import JoinError, LeaveError
 from decorators import bye_on_error, bye_on_error_cb
 import logging
+import traceback
 # Define some states for the Participant connection.
 OPENING = 0
 UP = 1
@@ -135,9 +136,9 @@ class Participant(object):
         def callback(data):
             try:
                 # Validate the participant against the DB.
-                received_id = headers['User-ID']
+                received_id = headers['User-ID'].strip()
                 conga_id = self.db.get(
-                    "SELECT conga_id FROM conga_congamember WHERE id=%s",
+                    "SELECT conga_id FROM conga_congamember WHERE member_id=%s",
                     (received_id,)
                 )[0][0]
 
@@ -155,8 +156,9 @@ class Participant(object):
                 # lookup.
                 logging.error(
                     "Hit exception %s adding participant %s to conga %s." %
-                    (e, self.participant_id, conga_id)
+                    (e, self.participant_id, self.conga_id)
                 )
+                logging.error(traceback.format_exc())
 
                 self.source_stream.close()
                 self.state = CLOSING

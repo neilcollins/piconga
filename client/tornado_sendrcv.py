@@ -91,14 +91,15 @@ class TornadoSendRcv(object):
                 # Try to receive a message from the socket.
                 try:
                     data = self._sock.recv(4096)
-                    logger.debug("Received message: %s", data)
+                    if data:
+                        logger.debug("Received message: %s", data)
                     
-                    # Parse the message as a Conga protocol message.
-                    conga_msg = self._parse_conga_msg(data)
+                        # Parse the message as a Conga protocol message.
+                        conga_msg = self._parse_conga_msg(data)
 
-                    # Put this data onto the receive queue.
-                    if conga_msg is not None:
-                        self._recv_queue.put(conga_msg)
+                        # Put this data onto the receive queue.
+                        if conga_msg is not None:
+                            self._recv_queue.put(conga_msg)
                 except socket.timeout:
                     # It's fine for the socket to timeout, we just don't 
                     # want it sitting there forever.
@@ -292,10 +293,6 @@ def get_message(recv_q):
         # No messages to return, return None.
         return None
     
-    if msg.type == QueueMsg.SERVER_MSG:        
-        # Parse the message as a Conga protocol message.
-        msg.data = TornadoSendRcv._parse_conga_msg(msg)
-        
     return msg
     
     
