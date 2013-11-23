@@ -64,7 +64,13 @@ class MenuItem(object):
     Single item in a menu.
     """
     
-    def __init__(self, trigger, text, next_menu, action, hidden=False):
+    def __init__(self,
+                 trigger,
+                 text,
+                 next_menu,
+                 action,
+                 hidden=False,
+                 set_pending=False):
         """
         Constructor.  Store input parameters.
         """
@@ -74,7 +80,7 @@ class MenuItem(object):
         # Text to display in the menu for this item.
         self.text = text
         
-        # Next menu to move to when this item is selected.  Can be None to
+        # Next menu to move to when this item is selected.  Can be "SAME" to
         # stay in this menu.
         self.next_menu = next_menu
         
@@ -84,6 +90,10 @@ class MenuItem(object):
 
         # Whether this is a hidden menu item.
         self.hidden = hidden
+        
+        # Whether this item sets the "result pending" state in the CLI, to
+        # warn the user that we're waiting for the server to say something.
+        self.set_pending = set_pending
         
         return
 
@@ -108,10 +118,11 @@ class Event(object):
     CONGA_JOINED = 2  # Client has joined a conga.
     CONGA_LEFT = 3    # Client has left a conga.
     LOST_CONN = 4     # Client lost connection to the server.
+    ERROR = 5         # Non-fatal server error.
      
     # List of all allowed events.
     allowed_events = [TEXT, MSG_RECVD, CONGA_JOINED,
-                      CONGA_LEFT, LOST_CONN]
+                      CONGA_LEFT, LOST_CONN, ERROR]
     
     def __init__(self, event_type, text):
         """
@@ -276,16 +287,19 @@ class Cli(object):
                               action=Action.DISCONNECT)
         join_conga = MenuItem(trigger="J",
                               text="Join a Conga",
-                              next_menu=self.in_conga,
-                              action=Action.JOIN_CONGA)
+                              next_menu="SAME",
+                              action=Action.JOIN_CONGA,
+                              set_pending=True)
         create_conga = MenuItem(trigger="C",
                                 text="Create a Conga",
-                                next_menu=self.in_conga,
-                                action=Action.CREATE_CONGA)
+                                next_menu="SAME",
+                                action=Action.CREATE_CONGA,
+                                set_pending=True)
         leave_conga = MenuItem(trigger="L",
                                text="Leave the Conga",
                                next_menu=self.main_menu,
-                               action=Action.LEAVE_CONGA)
+                               action=Action.LEAVE_CONGA,
+                               set_pending=True)
         send_ping = MenuItem(trigger="P",
                              text="Send a ping over the Conga",
                              next_menu="SAME",
@@ -303,6 +317,7 @@ class Cli(object):
         self._event_queue = multiprocessing.Queue()
         self._action_queue = multiprocessing.Queue()
         self._current_menu = self.start_menu
+        self._result_pending = False
         
         return
         
@@ -381,6 +396,9 @@ class Cli(object):
         """
         Take appropriate action for a received event.
         """
+        
+        logger.debug("Received Event of type %d" % event.type)
+        
         # Our behaviour depends on what kind of event we have received.
         if event.type == Event.TEXT:
             # Simple text event.  Just print it to the event window.
@@ -400,15 +418,29 @@ class Cli(object):
                                curses.color_pair(2))
             
             # Now print information about the conga.
-            self._print_to_win(event.text, self._event_win)               
+            self._print_to_win(event.text, self._event_win)
+            
+            # If we're not already in the in-conga menu, move there.
+            self._current_menu = self.in_conga
+            self._result_pending = False
         elif event.type == Event.CONGA_LEFT:
             # Left a conga.  Print a notification.
             self._print_to_win("Left the conga.",
                                self._event_win,
                                curses.color_pair(3))
+                               
+            # Drop back to the main menu.
+            self._current_menu = self.main_menu
+            self._result_pending = False
         elif event.type == Event.LOST_CONN:
             # Lost connection with the server.  Drop out.
             raise Cli.LostConnection
+        elif event.type == Event.ERROR:
+            # Non-fatal error on the server side.  Print the error details
+            # and ensure that we're not expecting anything more from the
+            # client code.
+            self._print_to_win(event.text, self._event_win)
+            self._result_pending = False
         else:
             # Unhandled event.  This shouldn't happen.  Raise an exception.
             raise TypeError("Unhandled CLI event type.")
@@ -431,7 +463,8 @@ class Cli(object):
 
         # If the input is not available from the current menu, ignore it.
         if char not in ([item.trigger for item in current_menu]):
-                return
+            logger.debug("Character %s is not a valid menu choice." % char)
+            return
         
         # The user must have pressed a key associated with one of the
         # menu items.  Trigger the associated action.
@@ -452,6 +485,7 @@ class Cli(object):
             if selected_item.action in Action.allowed_actions:
                 # Put the action on the queue.  No actions currently have
                 # associated parameters.
+                logger.debug("Send Action of type %d." % selected_item.action)
                 act = Action(selected_item.action, None)
                 self._action_queue.put(act)
             else:
@@ -469,7 +503,10 @@ class Cli(object):
                     "Unsupported menu: {}".format(selected_item.next_menu))
         else:
             self._current_menu = selected_item.next_menu
-    
+        
+        # Update the CLI's "pending" state from this item.
+        self._result_pending = selected_item.set_pending
+        
         # Check for exit from program - i.e. exit from the top-menu, which
         # has no parent.
         if self._current_menu is None:
@@ -520,6 +557,14 @@ class Cli(object):
         
         # Print the name of the current menu.
         self._input_win.addstr(1, 1, menu.name)
+        
+        # If the CLI is waiting for a response from the server, flag this
+        # up next to the menu name.
+        if self._result_pending:
+            self._input_win.addstr(1,
+                                   len(menu.name) + 2,
+                                   "(BUSY)",
+                                   curses.A_STANDOUT)
         
         # Print each of the menu items in turn.
         menu_items = menu.menu_items + self.global_menu.menu_items

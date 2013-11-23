@@ -77,22 +77,22 @@ class Client(object):
                         "<CONGA>", "<PASSWORD")
                     tornado_sendrcv.start_connection(out_msgs)
                     tornado_sendrcv.send_hello(out_msgs, self._userid)
-                    events.put(cli.Event(cli.Event.TEXT,
-                        "Created conga"))
+                    events.put(cli.Event(cli.Event.CONGA_JOINED,
+                        "Created and joined conga"))
                 elif recvd_action.type == cli.Action.JOIN_CONGA:
                     # Join an existing conga
                     self._django_sr.join_conga(
                         "<CONGA>", "<PASSWORD")
                     tornado_sendrcv.start_connection(out_msgs)
                     tornado_sendrcv.send_hello(out_msgs, self._userid)
-                    events.put(cli.Event(cli.Event.TEXT,
+                    events.put(cli.Event(cli.Event.CONGA_JOINED,
                         "Joined conga"))
                 elif recvd_action.type == cli.Action.LEAVE_CONGA:
                     # Left a conga
                     tornado_sendrcv.send_bye(out_msgs)
                     tornado_sendrcv.close_connection(out_msgs)
                     self._django_sr.leave_conga("<CONGA>", "<PASSWORD>")
-                    events.put(cli.Event(cli.Event.TEXT,
+                    events.put(cli.Event(cli.Event.CONGA_LEFT,
                         "Left conga"))
                 elif recvd_action.type == cli.Action.CONNECT:
                     # Register the user with the Django server.
@@ -126,7 +126,7 @@ class Client(object):
                     events.put(cli.Event(cli.Event.TEXT,
                         "Unknown action %d" % recvd_action.type))
             except django_sendrcv.ServerError, e:
-                events.put(cli.Event(cli.Event.TEXT, str(e)))
+                events.put(cli.Event(cli.Event.ERROR, str(e)))
             except Queue.Empty:
                 pass
 
