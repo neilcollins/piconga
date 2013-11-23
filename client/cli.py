@@ -85,7 +85,8 @@ class MenuItem(object):
         self.next_menu = next_menu
         
         # Action to send to the client loop on selecting this item.  Can be 
-        # None to indicate that no action should be sent.
+        # None to indicate that no action should be sent, or a function to run
+        # that function.
         self.action = action
 
         # Whether this is a hidden menu item.
@@ -303,11 +304,15 @@ class Cli(object):
         send_ping = MenuItem(trigger="P",
                              text="Send a ping over the Conga",
                              next_menu="SAME",
-                             action=Action.SEND_MSG)
-        self.global_menu.menu_items = [matrix, exit_menu]
-        self.start_menu.menu_items = [about, connect]
+                             action=self._send_ping)
+        send_msgs = MenuItem(trigger="F",
+                             text="Send free-form text messages over the Conga",
+                             next_menu="SAME",
+                             action=self._get_send_free_text)
+        self.global_menu.menu_items = [matrix]
+        self.start_menu.menu_items = [about, connect, exit_menu]
         self.main_menu.menu_items = [join_conga, create_conga, disconnect]
-        self.in_conga.menu_items = [send_ping, leave_conga]
+        self.in_conga.menu_items = [send_ping, send_msgs, leave_conga]
 
         # Internal state for the CLI.
         (self._rows, self._cols) = (0, 0)
@@ -563,7 +568,7 @@ class Cli(object):
         if self._result_pending:
             self._input_win.addstr(1,
                                    len(menu.name) + 2,
-                                   "(BUSY)",
+                                   "(WORKING...)",
                                    curses.A_STANDOUT)
         
         # Print each of the menu items in turn.
@@ -586,6 +591,57 @@ class Cli(object):
         
         return
         
+    def _send_ping(self):
+        """Send a ping along the Conga."""
+        
+        self._action_queue.put(Action(Action.SEND_MSG, {"text": "Ping!"}))
+        
+        return
+        
+    def _get_send_free_text(self):
+        """
+        Switch into freeform text entry mode and send messages.
+        """
+        
+        # Create the new freeform window - this exactly covers the input window,
+        # except for the top border.
+        (height, width) = self._input_win.getmaxyx()
+        free_win = self._input_win.derwin((height - 1), width, 1, 0)
+        
+        # Switch on character echo and cursor visibility.
+        curses.curs_set(1)
+        curses.echo()
+        
+        # Loop around fetching input from the window and sending it off to the
+        # client until the user leaves this mode.
+        keep_looping = True
+        while keep_looping:
+            # Clear the window to remove any left-over text from last time.
+            free_win.clear()
+            
+            # Give the user instructions.
+            free_win.addstr(1, 1, "Enter text to send along the Conga.")
+            free_win.addstr(2, 1, "Type '/quit' to return to the menus.")
+            
+            # Fetch the next string from the user.
+            free_win.addstr(4, 1, "> ")
+            input = free_win.getstr(4, 3)
+            
+            # Process the input.
+            if input == "/quit":
+                # Leave the loop.
+                keep_looping = False
+            else:
+                # Send this string along the Conga.
+                self._action_queue.put(Action(Action.SEND_MSG,
+                                              {"text": input}))
+        
+        # Finished sending messages. Return to invisible cursor and no input
+        # echo, destroy the window and return.
+        curses.curs_set(0)
+        curses.noecho()
+        del free_win
+        return
     
     def _cli_loop(self):
         """
@@ -610,7 +666,7 @@ class Cli(object):
                                    {"text": 
                                    "Lost connection to the Tornado server."}))
                 return
-
+            
             # Display the menu.
             self._display_menu()
 

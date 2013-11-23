@@ -109,10 +109,11 @@ class Client(object):
                     events.put(cli.Event(cli.Event.TEXT,
                         "Disconnected from  %s" % self.base_url))
                 elif recvd_action.type == cli.Action.SEND_MSG:
-                    # Send a ping along the Conga.
-                    tornado_sendrcv.send_msg(out_msgs, "Ping!")
+                    # Send a message along the Conga.
+                    message = recvd_action.params["text"]
+                    tornado_sendrcv.send_msg(out_msgs, message)
                     events.put(cli.Event(cli.Event.TEXT,
-                        "Sent a ping along the Conga."))
+                                         "%s: %s" % (self._username, message)))
                 elif recvd_action.type == cli.Action.QUIT:
                     logger.debug("CLI told us to quit")
                     try:
