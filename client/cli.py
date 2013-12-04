@@ -126,12 +126,13 @@ class Event(object):
     allowed_events = [TEXT, MSG_RECVD, CONGA_JOINED,
                       CONGA_LEFT, LOST_CONN, ERROR]
     
-    def __init__(self, event_type, text):
+    def __init__(self, event_type, text, conga_name=None):
         """
         Constructor.  Store input parameters.
         """
         self.type = event_type
         self.text = text
+        self.conga_name = conga_name
         self.printed = False
         
         return
@@ -145,6 +146,7 @@ class Event(object):
         """
         dict = {"type": self.type,
                 "text": self.text,
+                "conga_name": self.conga_name,
                 "printed": self.printed}
         
         return dict
@@ -157,6 +159,7 @@ class Event(object):
         """
         self.type = state["type"]
         self.text = state["text"]
+        self.conga_name = state["conga_name"]
         self.printed = state["printed"]
         
         return
@@ -290,17 +293,17 @@ class Cli(object):
         join_conga = MenuItem(trigger="J",
                               text="Join a Conga",
                               next_menu="SAME",
-                              action=Action.JOIN_CONGA,
+                              action=self._join_conga,
                               set_pending=True)
         create_conga = MenuItem(trigger="C",
                                 text="Create a Conga",
                                 next_menu="SAME",
-                                action=Action.CREATE_CONGA,
+                                action=self._create_conga,
                                 set_pending=True)
         leave_conga = MenuItem(trigger="L",
                                text="Leave the Conga",
                                next_menu=self.main_menu,
-                               action=Action.LEAVE_CONGA,
+                               action=self._leave_conga,
                                set_pending=True)
         send_ping = MenuItem(trigger="P",
                              text="Send a ping over the Conga",
@@ -309,7 +312,7 @@ class Cli(object):
         send_msgs = MenuItem(trigger="F",
                              text="Send free-form text messages over the Conga",
                              next_menu="SAME",
-                             action=self._free_text)
+                             action=self._spawn_free_text_thread)
         self.global_menu.menu_items = [matrix]
         self.start_menu.menu_items = [about, connect, exit_menu]
         self.main_menu.menu_items = [join_conga, create_conga, disconnect]
@@ -325,6 +328,7 @@ class Cli(object):
         self._current_menu = self.start_menu
         self._result_pending = False
         self._hide_input_win = False
+        self._conga_name = None
         
         return
         
@@ -424,6 +428,9 @@ class Cli(object):
                                self._event_win,
                                curses.color_pair(2))
             
+            # Save off the conga's name.
+            self._conga_name = event.conga_name
+            
             # Now print information about the conga.
             self._print_to_win(event.text, self._event_win)
             
@@ -435,6 +442,9 @@ class Cli(object):
             self._print_to_win("Left the conga.",
                                self._event_win,
                                curses.color_pair(3))
+            
+            # Wipe the current conga name.
+            self._conga_name = None
                                
             # Drop back to the main menu.
             self._current_menu = self.main_menu
@@ -600,7 +610,7 @@ class Cli(object):
         
         return
     
-    def _free_text(self):
+    def _spawn_free_text_thread(self):
         """Spawn off a new thread to do freeform text entry."""
         
         # Create the thread.
@@ -623,6 +633,7 @@ class Cli(object):
         # except for the top border.
         (height, width) = self._input_win.getmaxyx()
         free_win = self._input_win.derwin((height - 1), width, 1, 0)
+
         
         # Switch on character echo.
         curses.echo()
@@ -634,13 +645,16 @@ class Cli(object):
             # Clear the window to remove any left-over text from last time.
             free_win.clear()
             
+            # Redraw the window border.
+            free_win.border()
+            
             # Give the user instructions.
-            free_win.addstr(1, 1, "Enter text to send along the Conga.")
-            free_win.addstr(2, 1, "Type '/quit' to return to the menus.")
+            free_win.addstr(2, 2, "Enter text to send along the Conga.")
+            free_win.addstr(3, 2, "Type '/quit' to return to the menus.")
             
             # Fetch the next string from the user.
-            free_win.addstr(4, 1, "> ")
-            input = free_win.getstr(4, 3)
+            free_win.addstr(5, 2, "> ")
+            input = free_win.getstr(5, 4)
             
             # Process the input.
             if input == "/quit":
@@ -659,6 +673,70 @@ class Cli(object):
         
         return
     
+    def _get_conga_name(self):
+        """
+        Fetch the name of the conga to join/create.
+        """
+        
+        # Create a new window over the input window to get the name.  This
+        # should be visually distinct from the normal input window.
+        (height, width) = self._input_win.getmaxyx()
+        name_win = self._input_win.derwin(height - 1, width, 1, 0)
+        name_win.erase()
+        name_win.border()
+        
+        # Switch on character echo.
+        curses.echo()
+        
+        # Ask the user for the name of the Conga.  Note that, unlike free text
+        # entry for sending messages along the Conga, we can freeze all other
+        # processing at this point because we are not in a Conga yet.
+        name_win.addstr(2, 2, "Please enter the name of the Conga.")
+        name_win.addstr(4, 2, ">")
+        
+        name = name_win.getstr(4, 4)
+        
+        # Destroy the window and return.
+        del name_win
+        
+        return name
+        
+    def _create_conga(self):
+        """Create a Conga."""
+        
+        # Fetch the name for the Conga we want to create from the user.
+        name = self._get_conga_name()
+        
+        # Send this name to the client to create a new Conga.
+        action = Action(Action.CREATE_CONGA, {"name": name})
+        self._action_queue.put(action)
+        
+        return
+        
+    def _join_conga(self):
+        """Join a Conga."""
+    
+        # Fetch the name for the Conga we want to join from the user.
+        name = self._get_conga_name()
+        
+        # Send this name to the client to join a new Conga.
+        action = Action(Action.JOIN_CONGA, {"name": name})
+        self._action_queue.put(action)
+        
+        return
+        
+    def _leave_conga(self):
+        """Leave the Conga."""
+        
+        # We must be in a Conga at this point.
+        assert (self._conga_name is not None), "Not in a Conga"
+        
+        # Create an action to send to the client asking to leave the conga.
+        action = Action(Action.LEAVE_CONGA, {"name": self._conga_name})
+        self._action_queue.put(action)
+        
+        return
+        
     def _cli_loop(self):
         """
         Main CLI loop.  Display any new events and look for any user input.

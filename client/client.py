@@ -72,28 +72,31 @@ class Client(object):
                 recvd_action = actions.get(block=False)
                 logger.debug("Saw action type %d", recvd_action.type)
                 if recvd_action.type == cli.Action.CREATE_CONGA:
-                    # Create an existing conga
+                    # Create a new conga
+                    conga_name = recvd_action.params["name"]
                     self._django_sr.create_conga(
-                        "<CONGA>", "<PASSWORD")
+                        conga_name, self._password)
                     tornado_sendrcv.start_connection(out_msgs)
                     tornado_sendrcv.send_hello(out_msgs, self._userid)
                     events.put(cli.Event(cli.Event.CONGA_JOINED,
-                        "Created and joined conga"))
+                        "Created and joined conga %s" % conga_name, conga_name))
                 elif recvd_action.type == cli.Action.JOIN_CONGA:
                     # Join an existing conga
+                    conga_name = recvd_action.params["name"]
                     self._django_sr.join_conga(
-                        "<CONGA>", "<PASSWORD")
+                        conga_name, self._password)
                     tornado_sendrcv.start_connection(out_msgs)
                     tornado_sendrcv.send_hello(out_msgs, self._userid)
                     events.put(cli.Event(cli.Event.CONGA_JOINED,
-                        "Joined conga"))
+                        "Joined conga %s" % conga_name, conga_name))
                 elif recvd_action.type == cli.Action.LEAVE_CONGA:
                     # Left a conga
+                    conga_name = recvd_action.params["name"]
                     tornado_sendrcv.send_bye(out_msgs)
                     tornado_sendrcv.close_connection(out_msgs)
-                    self._django_sr.leave_conga("<CONGA>", "<PASSWORD>")
+                    self._django_sr.leave_conga(conga_name, self._password)
                     events.put(cli.Event(cli.Event.CONGA_LEFT,
-                        "Left conga"))
+                        "Left conga %s" % conga_name, conga_name))
                 elif recvd_action.type == cli.Action.CONNECT:
                     # Register the user with the Django server.
                     self._userid = self._django_sr.register_user(

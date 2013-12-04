@@ -196,7 +196,9 @@ class TornadoSendRcv(object):
             bytes_sent = self._sock.send(msg)
         except socket.error as e:
             send_error = SendError()
-            send_error.value = e.value
+            send_error.message = e.message
+            send_error.strerror = e.strerror
+            send_error.errno = e.errno
             raise send_error
         
         assert bytes_sent == len(msg)
