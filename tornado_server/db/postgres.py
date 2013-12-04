@@ -5,7 +5,11 @@ tornado_server.db.postgres
 
 This file implements the PostgreSQL portion of the database abstraction.
 """
-import psycopg2
+try:
+    import psycopg2
+except ImportError:
+    # Probably on Windows, which is a pain. Give up.
+    psycopg2 = object
 
 
 class Database(object):
