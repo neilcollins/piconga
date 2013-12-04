@@ -12,6 +12,7 @@ import logging
 import subprocess
 import multiprocessing
 import Queue
+import threading
 from time import sleep
 
 # PiConga imports
@@ -308,7 +309,7 @@ class Cli(object):
         send_msgs = MenuItem(trigger="F",
                              text="Send free-form text messages over the Conga",
                              next_menu="SAME",
-                             action=self._get_send_free_text)
+                             action=self._free_text)
         self.global_menu.menu_items = [matrix]
         self.start_menu.menu_items = [about, connect, exit_menu]
         self.main_menu.menu_items = [join_conga, create_conga, disconnect]
@@ -323,6 +324,7 @@ class Cli(object):
         self._action_queue = multiprocessing.Queue()
         self._current_menu = self.start_menu
         self._result_pending = False
+        self._hide_input_win = False
         
         return
         
@@ -597,6 +599,20 @@ class Cli(object):
         self._action_queue.put(Action(Action.SEND_MSG, {"text": "Ping!"}))
         
         return
+    
+    def _free_text(self):
+        """Spawn off a new thread to do freeform text entry."""
+        
+        # Create the thread.
+        thread = threading.Thread(target=self._get_send_free_text)
+        
+        # Stop the input menu from being updated.
+        self._hide_input_win = True
+        
+        # Kick off the thread - we continue here to let the event window run.
+        thread.start()
+        
+        return
         
     def _get_send_free_text(self):
         """
@@ -608,8 +624,7 @@ class Cli(object):
         (height, width) = self._input_win.getmaxyx()
         free_win = self._input_win.derwin((height - 1), width, 1, 0)
         
-        # Switch on character echo and cursor visibility.
-        curses.curs_set(1)
+        # Switch on character echo.
         curses.echo()
         
         # Loop around fetching input from the window and sending it off to the
@@ -636,11 +651,12 @@ class Cli(object):
                 self._action_queue.put(Action(Action.SEND_MSG,
                                               {"text": input}))
         
-        # Finished sending messages. Return to invisible cursor and no input
-        # echo, destroy the window and return.
-        curses.curs_set(0)
+        # Finished sending messages. Return to no input echo, destroy the
+        # window and return.
         curses.noecho()
+        self._hide_input_win = False
         del free_win
+        
         return
     
     def _cli_loop(self):
@@ -666,27 +682,30 @@ class Cli(object):
                                    {"text": 
                                    "Lost connection to the Tornado server."}))
                 return
+                        
+            if not self._hide_input_win:
+                # Display the menu.
+                self._display_menu()
+
+                # Get user input and process it, if there is any.
+                input = self._input_win.getch()
             
-            # Display the menu.
-            self._display_menu()
+                if input != -1:
+                    logger.debug("Got user input %c", input)
+                    try:
+                        self._process_input(input)            
+                    except Cli.ExitCli:
+                        self._action_queue.put(
+                                              Action(Action.QUIT,
+                                                     {"text": "Exited the CLI."}))
+                        return 
 
-            # Get user input and process it, if there is any.
-            input = self._input_win.getch()
-        
-            if input != -1:
-                logger.debug("Got user input %c", input)
-                try:
-                    self._process_input(input)            
-                except Cli.ExitCli:
-                    self._action_queue.put(
-                                          Action(Action.QUIT,
-                                                 {"text": "Exited the CLI."}))
-                    return 
+                # Redraw the input window.
+                self._input_win.refresh()
 
-            # Redraw both the windows.
+            # Redraw the event window.
             self._event_win.refresh()
-            self._input_win.refresh()
-
+            
             # Sleep!
             sleep(0.1)
             
