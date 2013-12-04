@@ -54,7 +54,6 @@ class TCPProxy(TCPServer):
     server. Each time a new connection comes in, this establishes a Participant
     object that wraps that connection.
     """
-    last_connection = None
     db = None
 
     def __init__(self, use_pg, db_path='', db_kwargs={}, *args, **kwargs):
@@ -70,17 +69,10 @@ class TCPProxy(TCPServer):
     def handle_stream(self, stream, address):
         """
         When a new incoming connection is found, this function is called. Wrap
-        the incoming connection in a Participant, then make it the most recent
-        connection. Tell the oldest connection to use the new one as its
-        write target.
+        the incoming connection in a Participant, then wait until it sends some
+        data.
         """
         r = Participant(stream, self.db)
-
-        if self.last_connection is not None:
-            self.last_connection.add_destination(r)
-
-        self.last_connection = r
-
         r.wait_for_headers()
 
 
