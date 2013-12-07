@@ -61,6 +61,9 @@ class Conga(object):
         if not self.participants:
             logging.debug("No participants.")
             self.participants.append((participant_id, participant))
+
+            # Point the participant at self initially.
+            participant.add_destination(participant)
             return
 
         # Special case: usually participants will join in ascending participant
