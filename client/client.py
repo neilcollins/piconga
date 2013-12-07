@@ -79,7 +79,7 @@ class Client(object):
                     tornado_sendrcv.start_connection(out_msgs)
                     tornado_sendrcv.send_hello(out_msgs, self._userid)
                     events.put(cli.Event(cli.Event.CONGA_JOINED,
-                        "Created and joined conga %s" % conga_name, conga_name))
+                        "Created and joined conga: %s" % conga_name, conga_name))
                 elif recvd_action.type == cli.Action.JOIN_CONGA:
                     # Join an existing conga
                     conga_name = recvd_action.params["name"]
