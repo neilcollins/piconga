@@ -216,14 +216,18 @@ class Participant(object):
         """
         @bye_on_error_cb(self)
         def callback(data):
+            dest_id = 0
+
             try:
+                dest_id = self.destination.participant_id
                 self.destination.write(header_data + data)
             except StreamClosedError:
                 if self.destination.state != CLOSING:
-                    # Unexpected closure: run the BYE logic.
+                    # Unexpected closure. BYE logic has already been run by
+                    # the decorator on write, so log and move on with our
+                    # lives.
                     logging.error(
-                        "Unexpected close by participant %d" % self.destination.participant_id
+                        "Unexpected close by participant %d" % dest_id
                     )
-                    self.destination._bye()('')
 
         return callback
