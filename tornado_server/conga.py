@@ -54,9 +54,12 @@ class Conga(object):
         conga. Finds the participants who will logically come before and after
         the new participant. Changes people's destinations.
         """
+        logging.debug("Participant id %d joining." % participant_id)
+
         # Special case: the first person joining a conga. Just add them to the
         # list and move on.
         if not self.participants:
+            logging.debug("No participants.")
             self.participants.append((participant_id, participant))
             return
 
@@ -66,6 +69,7 @@ class Conga(object):
         tail_id = self.participants[-1][0]
 
         if tail_id < participant_id:
+            logging.debug("At start.")
             prev = self.participants[-1][1]
             next = self.participants[0][1]
 
@@ -75,6 +79,7 @@ class Conga(object):
             # larger than the joining person's.
             for index, person in enumerate(self.participants):
                 if person[0] > participant_id:
+                    logging.debug("Found insert index: %d" % index)
                     break
 
             # Get the previous and next participants.
@@ -112,17 +117,21 @@ class Conga(object):
         Finds the participant in the current conga. Takes the person before
         them and sets their new target to the person after them.
         """
+        logging.debug("Participant id %d leaving." % participant_id)
+
         # Find the participant.
         match = False
 
         # There's a special case here: if the conga has only one participant.
         # Handle that case.
         if len(self.participants) == 1:
+            logging.debug("One participant.")
             self.participants.pop()
             return
 
         for index, person in enumerate(self.participants):
             if person[0] == participant_id:
+                logging.debug("Match at index %d, id %d" % (index, person[0]))
                 match = True
                 break
 
@@ -136,14 +145,17 @@ class Conga(object):
 
         if person == self.participants[0]:
             # Special case: participant at 'start' of Conga.
+            logging.debug("Start of conga.")
             prev = self.participants[-1][1]
             next = self.participants[1][1]
         elif person == self.participants[-1]:
             # Special case: person at 'end' of Conga.
+            logging.debug("End of conga.")
             prev = self.participants[-2][1]
             next = self.participants[0][1]
         else:
             # Standard case.
+            logging.debug("Normal.")
             prev = self.participants[index - 1][1]
             next = self.participants[index + 1][1]
 
