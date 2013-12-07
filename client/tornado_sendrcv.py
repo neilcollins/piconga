@@ -332,13 +332,13 @@ def send_hello(send_q, userid):
     return
     
     
-def send_msg(send_q, data):
+def send_msg(send_q, data, from_hdr=""):
     """
     Send a MSG message to the Tornado server.  Requires the payload of 
     the message you wish to send.
     """
     
-    msg = create_conga_msg("MSG", {}, data)
+    msg = create_conga_msg("MSG", {"From": from_hdr}, data)
     
     send_q.put(msg)
     

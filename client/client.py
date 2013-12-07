@@ -88,13 +88,12 @@ class Client(object):
                     tornado_sendrcv.start_connection(out_msgs)
                     tornado_sendrcv.send_hello(out_msgs, self._userid)
                     events.put(cli.Event(cli.Event.CONGA_JOINED,
-                        "Joined conga %s" % conga_name, conga_name))
+                        "Conga name: %s" % conga_name, conga_name))
                 elif recvd_action.type == cli.Action.LEAVE_CONGA:
                     # Left a conga
                     conga_name = recvd_action.params["name"]
                     tornado_sendrcv.send_bye(out_msgs)
                     tornado_sendrcv.close_connection(out_msgs)
-                    self._django_sr.leave_conga(conga_name, self._password)
                     events.put(cli.Event(cli.Event.CONGA_LEFT,
                         "Left conga %s" % conga_name, conga_name))
                 elif recvd_action.type == cli.Action.CONNECT:
@@ -114,9 +113,11 @@ class Client(object):
                 elif recvd_action.type == cli.Action.SEND_MSG:
                     # Send a message along the Conga.
                     message = recvd_action.params["text"]
-                    tornado_sendrcv.send_msg(out_msgs, message)
+                    tornado_sendrcv.send_msg(out_msgs, message,
+                                             self._username)
                     events.put(cli.Event(cli.Event.TEXT,
-                                         "%s: %s" % (self._username, message)))
+                                         "%s: %s" %
+                                         (self._username, message)))                         
                 elif recvd_action.type == cli.Action.QUIT:
                     logger.debug("CLI told us to quit")
                     try:
@@ -141,7 +142,11 @@ class Client(object):
                 if recvd_msg[0] == "MSG":
                     # New message from the Tornado server.
                     (verb, headers, body) = recvd_msg
-                    events.put(cli.Event(cli.Event.TEXT, body))
+                    if "From" in headers:
+                        msg_text = "%s: %s" % (headers["From"], body)
+                    else:
+                        msg_text = body
+                    events.put(cli.Event(cli.Event.MSG_RECVD, msg_text))
                 elif recvd_msg[0] == "BYE":
                     # Lost connection to the Tornado server.
                     events.put(cli.Event(cli.Event.LOST_CONN))
