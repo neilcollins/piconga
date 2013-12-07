@@ -64,7 +64,6 @@ class Conga(object):
         # ID order. Check for that possibility first. Then, check whether we're
         # at the start of the list as well.
         tail_id = self.participants[-1][0]
-        head_id = self.participants[0][0]
 
         if tail_id < participant_id:
             prev = self.participants[-1][1]

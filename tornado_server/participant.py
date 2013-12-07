@@ -219,11 +219,11 @@ class Participant(object):
             try:
                 self.destination.write(header_data + data)
             except StreamClosedError:
-                if self.state != CLOSING:
+                if self.destination.state != CLOSING:
                     # Unexpected closure: run the BYE logic.
                     logging.error(
-                        "Unexpected close by participant %d" % self.participant_id
+                        "Unexpected close by participant %d" % self.destination.participant_id
                     )
-                    self._bye()('')
+                    self.destination._bye()('')
 
         return callback
