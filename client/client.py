@@ -114,7 +114,7 @@ class Client(object):
                     # Send a message along the Conga.
                     message = recvd_action.params["text"]
                     tornado_sendrcv.send_msg(out_msgs, message,
-                                             self._username)
+                                             {"From": self._username})
                     events.put(cli.Event(cli.Event.TEXT,
                                          "%s: %s" %
                                          (self._username, message)))                         
@@ -153,7 +153,11 @@ class Client(object):
                     # Now forward it on through the Conga, as long as we
                     # didn't send it in the first place!
                     if msg_from != self._username:
-                        tornado_sendrcv.send_msg(out_msgs, body, msg_from)
+                        new_headers = {"From": msg_from,
+                                       "Message-ID": headers["Message-ID"]}
+                        tornado_sendrcv.send_msg(out_msgs,
+                                                 body,
+                                                 new_headers)
                 elif recvd_msg[0] == "BYE":
                     # Lost connection to the Tornado server.
                     events.put(cli.Event(cli.Event.LOST_CONN))
