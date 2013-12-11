@@ -171,7 +171,9 @@ if __name__ == "__main__":
     print "Please enter your name."
     username = raw_input("Username: ")
     print "Now please enter your password."
-    password = getpass.getpass("Password: ")
+    password = ""
+    while len(password) == 0:
+        password = getpass.getpass("Password: ")
     
     # Set up a logging object for this module and make it log to a file.
     logger = logging.getLogger("piconga")
