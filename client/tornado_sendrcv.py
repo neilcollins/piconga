@@ -311,7 +311,8 @@ def create_conga_msg(verb, headers, body=""):
     
     message = "%s\r\n" % verb
     for name in headers.keys():
-        message += "%s: %s\r\n" % (name, headers[name])
+        if headers[name] is not None:
+            message += "%s: %s\r\n" % (name, headers[name])
     message += "Content-Length: %d\r\n" % len(body)
     message += "\r\n"
     message += body
@@ -332,13 +333,13 @@ def send_hello(send_q, userid):
     return
     
     
-def send_msg(send_q, data, from_hdr=""):
+def send_msg(send_q, data, headers={}):
     """
     Send a MSG message to the Tornado server.  Requires the payload of 
     the message you wish to send.
     """
     
-    msg = create_conga_msg("MSG", {"From": from_hdr}, data)
+    msg = create_conga_msg("MSG", headers, data)
     
     send_q.put(msg)
     
