@@ -140,13 +140,20 @@ class Client(object):
             if recvd_msg is not None:
                 logger.debug("@@@PAB: %s" % str(recvd_msg))
                 if recvd_msg[0] == "MSG":
-                    # New message from the Tornado server.
+                    # New message from the Tornado server.  Tell the CLI.
                     (verb, headers, body) = recvd_msg
                     if "From" in headers:
-                        msg_text = "%s: %s" % (headers["From"], body)
+                        msg_from = headers["From"]
+                        msg_text = "%s: %s" % (msg_from, body)
                     else:
+                        msg_from = None
                         msg_text = body
                     events.put(cli.Event(cli.Event.MSG_RECVD, msg_text))
+                    
+                    # Now forward it on through the Conga, as long as we
+                    # didn't send it in the first place!
+                    if msg_from != self._username:
+                        tornado_sendrcv.send_msg(out_msgs, body, msg_from)
                 elif recvd_msg[0] == "BYE":
                     # Lost connection to the Tornado server.
                     events.put(cli.Event(cli.Event.LOST_CONN))
