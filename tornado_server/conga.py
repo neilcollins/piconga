@@ -8,6 +8,7 @@ object provides detailed knowledge of how Congas are constructed from
 Participants.
 """
 import logging
+import random
 from tornado_exceptions import JoinError, LeaveError
 
 
@@ -44,6 +45,11 @@ class Conga(object):
         #: (Participant id, Participant object). This allows for linear-time
         #: insertion of and removal of conga participants.
         self.participants = []
+
+        # A dict of the outstanding messages being sent around the conga, and
+        # the participant ID that sent them. Used to prevent a message looping
+        # forever.
+        self.outstanding_messages = {}
 
     def join(self, participant, participant_id):
         """
@@ -169,3 +175,59 @@ class Conga(object):
         self.participants.pop(index)
 
         return
+
+    def new_message(self, participant_id):
+        """
+        Notify the conga about a new message.  Should be called whenever a
+        message is received without a Message-ID header. Returns the ID to give
+        that message.
+        """
+        msg_id = '%10d' % (random.randint(1, 4294967296)) # From 1 to 2^32.
+        msg_id = msg_id.strip()
+        self.outstanding_messages[msg_id] = participant_id
+        logging.info(
+            "Added new message: ID %s, Participant %s." % (
+                msg_id,
+                participant_id
+            )
+        )
+        return msg_id
+
+    def stop_loop(self, msg_id, participant_id):
+        """
+        Check with the conga whether the message currently looping around the
+        conga has reached the participant who originally sent it. Returns
+        True if the message should be prevented from looping further, or False
+        if it's safe to send to this participant.
+
+        This will also confirm that the participant who originally sent
+        the message is still in the conga. If they aren't, the message will
+        be stopped immediately.
+        """
+        # First, check whether the participant who sent the message is the
+        # one we're about to send to.
+        msg_id = msg_id.strip()
+        print self.outstanding_messages
+
+        try:
+            original_sender_id = self.outstanding_messages[msg_id]
+        except KeyError:
+            # Unknown message ID. Kill it with fire.
+            logging.info("Unknown message ID %s" % msg_id)
+            return True
+
+        if original_sender_id == participant_id:
+            logging.info("Message returning to original sender.")
+            del self.outstanding_messages[msg_id]
+            return True
+
+        # Next, confirm the original sender is still in the conga.
+        for pid in (participant[0] for participant in self.participants):
+            if pid == original_sender_id:
+                logging.info("Original sender still in Conga")
+                return False
+
+        # If we got here the original sender has gone: terminate the message.
+        logging.info("Original sender no longer in conga.")
+        del self.outstanding_messages[msg_id]
+        return True

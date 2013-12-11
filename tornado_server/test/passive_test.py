@@ -6,6 +6,7 @@ test/passive_test.py
 Provides a basic test that a simple conga line will work.
 """
 import socket
+import select
 import time
 import sqlite3
 
@@ -13,8 +14,10 @@ target = '127.0.0.1'
 target_port = 8888
 hello = "HELLO\r\nContent-Length: 0\r\nUser-ID: %s\r\n\r\n"
 bye = "BYE\r\nContent-Length: 0\r\n\r\n"
-msg = "MSG\r\nContent-Length: 13\r\n\r\nTest message."
-full_len = len(msg)
+msg = "MSG\r\nContent-Length: 13\r\nMessage-ID: %s\r\n\r\nTest message."
+first_msg = "MSG\r\nContent-Length: 13\r\n\r\nTest message."
+full_len = len(first_msg) + len("Message-ID: 0000000000\r\n")
+msg_id = ''
 
 # First, add ourselves to the database.
 conn = sqlite3.connect('../../server/piconga.db')
@@ -45,19 +48,33 @@ sck_last.connect((target, target_port))
 sck1.send(hello % 1)
 for i, sck in enumerate(sockets):
     sck.send(hello % (i + 2))
+    time.sleep(0.01)
 sck_last.send(hello % 12)
 
 # Send the initial message.
-sck1.send(msg)
+sck1.send(first_msg)
 
 for i, sck in enumerate(sockets):
     resp = sck.recv(full_len)
-    assert resp == msg
+
+    # The first time around, grab the message ID.
+    if not msg_id:
+        msg_id = resp[37:47]
+
+    print msg_id
+    print (msg % msg_id)
+    assert resp == (msg % msg_id)
     sck.send(resp)
 
 # Get the message off the end.
 resp = sck_last.recv(full_len)
-assert resp == msg
+assert resp == (msg % msg_id)
+
+# Now, send it again, then confirm that the first socket doesn't get it.
+sck_last.send(resp)
+
+# Wait a whole second to check if we get our message.
+assert not select.select([sck_last], [], [], 1)[0]
 
 # Now say bye!
 sck1.send(bye)

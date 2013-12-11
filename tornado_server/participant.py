@@ -50,11 +50,16 @@ class Participant(object):
         self.destination = destination
 
     @bye_on_error
-    def write(self, data):
+    def write(self, data, message_id, conga):
         """
         Write data on the downstream connection. If no such connection exists,
         drop this stuff on the floor.
         """
+        # Before sending this, check whether we originally sent this message.
+        # If we did, don't do anything.
+        if conga.stop_loop(message_id, self.participant_id):
+            return
+
         try:
             self.source_stream.write(data)
         except AttributeError:
@@ -108,8 +113,7 @@ class Participant(object):
         elif (request_uri == 'BYE') and (self.state == UP):
             cb = self._bye(headers)
         elif (request_uri == 'MSG') and (self.state == UP):
-            # This is a simple message, so we just want to repeat it.
-            cb = self._repeat_data(header_data)
+            cb = self._repeat_data(header_data, headers)
         else:
             # Unexpected verb: bail.
             logging.error(
@@ -207,7 +211,7 @@ class Participant(object):
 
         return callback
 
-    def _repeat_data(self, header_data):
+    def _repeat_data(self, header_data, headers):
         """
         Builds a closure for use as a data sending callback. We use a closure
         here to ensure that we are able to wait for the message body before
@@ -216,11 +220,26 @@ class Participant(object):
         """
         @bye_on_error_cb(self)
         def callback(data):
+            # Before we start, check whether there is a Message ID on this
+            # message. If there isn't, we've never seen it before.
+            # Check whether this is a message we've seen before.
+            conga = conga_from_id(self.conga_id)
+
+            try:
+                msg_id = headers['Message-ID']
+                new_header_data = header_data
+            except KeyError:
+                # New message. Get a message ID for it, and then add it to the
+                # header data.
+                msg_id = conga.new_message(self.participant_id)
+                new_header_data = header_data[:-2]
+                new_header_data += 'Message-ID: %s\r\n\r\n' % (msg_id)
+
             dest_id = 0
 
             try:
                 dest_id = self.destination.participant_id
-                self.destination.write(header_data + data)
+                self.destination.write(new_header_data + data, msg_id, conga)
             except StreamClosedError:
                 if self.destination.state != CLOSING:
                     # Unexpected closure. BYE logic has already been run by
