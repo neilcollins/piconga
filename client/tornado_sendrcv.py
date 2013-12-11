@@ -174,7 +174,7 @@ class TornadoSendRcv(object):
             name, sep, value = line.partition(":")
             assert sep == ":", "No colon found in header"
             assert name not in headers.keys(), "Duplicate headers found"
-            headers[name] = value
+            headers[name] = value.lstrip()
         
         # We must have made it out of the loop by setting the body variable,
         # so it's safe to return it here.        
